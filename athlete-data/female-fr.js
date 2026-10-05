@@ -1,0 +1,1 @@
+window.ATHLETE_CHUNKS=window.ATHLETE_CHUNKS||[];window.ATHLETE_CHUNKS.push(...[["female-132","Stella Graham","Fr","Female",2.5,5.0,1.0,1.5,"3.5–4.0",210,0,[],4.9,1.0,9.5,1.0,44.0,1.0,7.6,1.0,8.73,1.0,40.0,1.0,65.0,2.0,105.0,2.0,35.0,1.0]]);
