@@ -30,15 +30,9 @@ window.addEventListener('DOMContentLoaded',()=>{
   window.openProfile=function(id){oldOpen(id);renderName(document.getElementById('pname').textContent);};
   async function loadAssets(){
     try{
-      const urls=[0,1,2,3,4].map(i=>`athlete-data/photo-mini-${i}.js`);
-      const parts=await Promise.all(urls.map(async u=>{
-        const t=await fetch(u,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(u);return r.text()});
-        const a=t.indexOf("+'")+2,b=t.lastIndexOf("';");
-        if(a<2||b<a)throw new Error('photo chunk parse');
-        return t.slice(a,b).replace(/\s/g,'');
-      }));
-      window._PHOTO_B64=parts.join('');
-      await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='athlete-data/photo-map.js?v=2';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
+      await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='athlete-data/photo-map.js?v=3';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
+      const b64=await fetch('athlete-data/photo-sprite-tiny.b64?v=1',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('photo sprite');return r.text()});
+      window.ATHLETE_PHOTO_SPRITE='data:image/webp;base64,'+b64.trim();
       assetsReady=true;
     }catch(e){assetsReady=true;console.warn('Athlete photos unavailable',e)}
     if(!document.getElementById('profile').classList.contains('hide'))renderName(document.getElementById('pname').textContent);
