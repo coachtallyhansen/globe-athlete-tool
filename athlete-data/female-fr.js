@@ -39,3 +39,11 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
   loadAssets();
 });
+
+// Load the live Sheet sync after the preview's main code has initialized.
+window.addEventListener('DOMContentLoaded',()=>{
+  const s=document.createElement('script');
+  s.src='live-data.js?v=1';
+  s.async=true;
+  document.head.appendChild(s);
+});
