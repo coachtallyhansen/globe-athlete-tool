@@ -10,18 +10,15 @@ window.addEventListener('DOMContentLoaded',()=>{
   const hero=document.createElement('div');hero.id='heroPhoto';hero.className='heroPhoto';head.after(hero);
   const photoMap={};
   const initials=n=>n.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
-  const render=a=>{if(!a)return;const src=photoMap[a.name];hero.innerHTML=src?`<img src="${src}" alt="${a.name} athlete photo">`:`<div class="photoEmpty"><div><b>${initials(a.name)}</b><small>PHOTO COMING SOON</small></div></div>`;};
+  const renderName=name=>{if(!name)return;const src=photoMap[name];hero.innerHTML=src?`<img src="${src}" alt="${name} athlete photo">`:`<div class="photoEmpty"><div><b>${initials(name)}</b><small>PHOTO COMING SOON</small></div></div>`;};
   const oldOpen=window.openProfile;
-  window.openProfile=function(id){oldOpen(id);render(window.DATA?.athletes?.find(x=>x.id===id)||window.athletes?.find?.(x=>x.id===id));};
+  window.openProfile=function(id){oldOpen(id);renderName(document.getElementById('pname').textContent);};
   fetch('index.html',{cache:'no-store'}).then(r=>r.text()).then(t=>{
     ['Heber Hansen','Olive Hansen'].forEach(name=>{
       const safe=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
       const m=t.match(new RegExp("'"+safe+"'\\s*:\\s*\\{[\\s\\S]*?photo:'([^']+)'"));
       if(m)photoMap[name]=m[1];
     });
-    if(!document.getElementById('profile').classList.contains('hide')){
-      const n=document.getElementById('pname').textContent;
-      render((window.DATA?.athletes||window.athletes||[]).find(x=>x.name===n));
-    }
+    if(!document.getElementById('profile').classList.contains('hide'))renderName(document.getElementById('pname').textContent);
   }).catch(()=>{});
 });
