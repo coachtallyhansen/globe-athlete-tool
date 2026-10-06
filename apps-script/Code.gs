@@ -4,6 +4,42 @@ const SOURCE_SHEETS = [
 ];
 const VALID_YEARS = new Set(['Sr', 'Jr', 'So', 'Fr']);
 const CACHE_SECONDS = 30;
+const ACCOUNTS_SHEET = 'Web App Accounts';
+const ALLOWED_DOMAIN = 'globeschools.org';
+const PUBLIC_CACHE_KEY = 'public-payload-v4';
+
+const ACCOUNT_COL = {
+  email: 0,
+  sub: 1,
+  athleteName: 2,
+  gender: 3,
+  primarySport: 4,
+  role: 5,
+  status: 6,
+  updatedAt: 7
+};
+
+const SPORT_MAP = {
+  '🏈': 'Football',
+  '🏐': 'Volleyball',
+  '🏃': 'Cross Country',
+  '🏃‍♂️': 'Cross Country',
+  '🏃‍♀️': 'Cross Country',
+  '🏊': 'Swim',
+  '📣': 'Cheer',
+  '🎮': 'Esports',
+  '🏀': 'Basketball',
+  '🤼': 'Wrestling',
+  '⚽': 'Soccer',
+  '💃': 'Pom',
+  '⚾': 'Baseball',
+  '🥎': 'Softball',
+  '👟': 'Track & Field',
+  '🏃‍➡️': 'Track & Field',
+  '🎾': 'Tennis',
+  '⛳': 'Golf',
+  '🏖️🏐': 'Beach Volleyball'
+};
 
 const COL = {
   athlete: 0,
@@ -34,7 +70,7 @@ const METRICS = {
 function doGet(e) {
   try {
     if (e && e.parameter && e.parameter.mode === 'health') {
-      return json_({ ok: true, service: 'Globe Athlete Public Data', version: 'v10-live' });
+      return json_({ ok: true, service: 'Globe Athlete Public Data', version: 'v10-live-auth' });
     }
     return json_(buildPublicPayload_());
   } catch (err) {
@@ -46,17 +82,277 @@ function doGet(e) {
   }
 }
 
-function buildPublicPayload_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('public-payload-v3');
-  if (cached) return JSON.parse(cached);
+function doPost(e) {
+  try {
+    const body = parsePostBody_(e);
+    const action = String(body.action || '').trim();
+    if (!action) return json_({ ok: false, code: 'MISSING_ACTION', error: 'Missing action.' });
 
+    const claims = verifyGoogleIdToken_(body.idToken);
+    const ss = getSpreadsheet_();
+    const account = resolveAccount_(ss, claims);
+
+    if (!account.ok) return json_(account);
+
+    if (action === 'session') {
+      return json_({
+        ok: true,
+        role: account.role,
+        email: claims.email,
+        athlete: account.athlete ? publicSessionAthlete_(account.athlete, account.primarySport) : null
+      });
+    }
+
+    if (action === 'setPrimarySport') {
+      if (!account.athlete) {
+        return json_({ ok: false, code: 'NO_ATHLETE', error: 'This account is not linked to an athlete.' });
+      }
+      const requested = String(body.sport || '').trim();
+      if (!requested || !account.athlete.sports.includes(requested)) {
+        return json_({ ok: false, code: 'INVALID_SPORT', error: 'Choose one of the sports assigned to this athlete.' });
+      }
+      updatePrimarySport_(account.sheet, account.rowNumber, requested);
+      CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);
+      return json_({
+        ok: true,
+        primarySportIcon: requested,
+        primarySport: sportName_(requested),
+        athlete: publicSessionAthlete_(account.athlete, requested)
+      });
+    }
+
+    return json_({ ok: false, code: 'UNKNOWN_ACTION', error: 'Unknown action.' });
+  } catch (err) {
+    return json_({
+      ok: false,
+      code: 'SERVER_ERROR',
+      error: String(err && err.message ? err.message : err)
+    });
+  }
+}
+
+function parsePostBody_(e) {
+  const text = e && e.postData && e.postData.contents ? e.postData.contents : '';
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch (err) { throw new Error('Invalid request body.'); }
+}
+
+function getSpreadsheet_() {
   const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-  if (!spreadsheetId) {
-    throw new Error('Missing Script Property: SPREADSHEET_ID');
+  if (!spreadsheetId) throw new Error('Missing Script Property: SPREADSHEET_ID');
+  return SpreadsheetApp.openById(spreadsheetId);
+}
+
+function verifyGoogleIdToken_(idToken) {
+  const token = String(idToken || '').trim();
+  if (!token) throw new Error('Missing Google sign-in token.');
+
+  const clientId = String(PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '').trim();
+  if (!clientId) throw new Error('Missing Script Property: GOOGLE_CLIENT_ID');
+
+  const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (response.getResponseCode() !== 200) throw new Error('Google sign-in token could not be verified.');
+
+  const claims = JSON.parse(response.getContentText());
+  if (String(claims.aud || '') !== clientId) throw new Error('Google sign-in token was issued for a different app.');
+  if (!(claims.email_verified === true || String(claims.email_verified).toLowerCase() === 'true')) throw new Error('Google account email is not verified.');
+
+  const email = String(claims.email || '').trim().toLowerCase();
+  const hostedDomain = String(claims.hd || '').trim().toLowerCase();
+  if (!email.endsWith('@' + ALLOWED_DOMAIN) || hostedDomain !== ALLOWED_DOMAIN) {
+    throw new Error('Please sign in with a @' + ALLOWED_DOMAIN + ' account.');
   }
 
-  const ss = SpreadsheetApp.openById(spreadsheetId);
+  const exp = Number(claims.exp || 0);
+  if (!exp || exp * 1000 < Date.now()) throw new Error('Google sign-in token has expired.');
+
+  return { email, sub: String(claims.sub || ''), hd: hostedDomain };
+}
+
+function getAccountsSheet_(ss) {
+  let sheet = ss.getSheetByName(ACCOUNTS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(ACCOUNTS_SHEET);
+    sheet.getRange(1, 1, 1, 8).setValues([['Email','Google Sub','Athlete Name','Gender','Primary Sport','Role','Status','Updated At']]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function resolveAccount_(ss, claims) {
+  const sheet = getAccountsSheet_(ss);
+  const values = sheet.getDataRange().getValues();
+  const email = claims.email;
+
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    if (String(row[ACCOUNT_COL.email] || '').trim().toLowerCase() !== email) continue;
+
+    const status = String(row[ACCOUNT_COL.status] || 'Active').trim();
+    if (/^(disabled|inactive|blocked)$/i.test(status)) {
+      return { ok: false, code: 'ACCOUNT_DISABLED', error: 'This web app account is disabled.' };
+    }
+
+    const storedSub = String(row[ACCOUNT_COL.sub] || '').trim();
+    if (storedSub && storedSub !== claims.sub) {
+      return { ok: false, code: 'ACCOUNT_MISMATCH', error: 'This email is linked to a different Google account.' };
+    }
+    if (!storedSub && claims.sub) sheet.getRange(r + 1, ACCOUNT_COL.sub + 1).setValue(claims.sub);
+
+    const role = String(row[ACCOUNT_COL.role] || 'Student').trim() || 'Student';
+    const athleteName = String(row[ACCOUNT_COL.athleteName] || '').trim();
+    const gender = String(row[ACCOUNT_COL.gender] || '').trim();
+    const primarySport = String(row[ACCOUNT_COL.primarySport] || '').trim();
+    const athlete = athleteName ? findAthlete_(ss, athleteName, gender) : null;
+
+    if (/^student$/i.test(role) && !athlete) {
+      return { ok: false, code: 'ATHLETE_NOT_FOUND', error: 'Your account is linked, but the athlete record could not be found.' };
+    }
+
+    return { ok: true, role, athlete, primarySport, sheet, rowNumber: r + 1 };
+  }
+
+  const auto = autoMatchAthleteByEmail_(ss, email);
+  if (!auto) {
+    return {
+      ok: false,
+      code: 'ACCOUNT_NOT_LINKED',
+      error: 'Your district account is not linked to an athlete profile yet.',
+      email
+    };
+  }
+
+  const rowNumber = sheet.getLastRow() + 1;
+  sheet.getRange(rowNumber, 1, 1, 8).setValues([[
+    email,
+    claims.sub,
+    auto.name,
+    auto.gender,
+    '',
+    'Student',
+    'Active',
+    new Date()
+  ]]);
+
+  return { ok: true, role: 'Student', athlete: auto, primarySport: '', sheet, rowNumber };
+}
+
+function autoMatchAthleteByEmail_(ss, email) {
+  const local = String(email || '').split('@')[0].toLowerCase();
+  if (!local) return null;
+  const matches = new Map();
+
+  SOURCE_SHEETS.forEach(source => {
+    const sheet = ss.getSheetByName(source.name);
+    if (!sheet) return;
+    const values = sheet.getDataRange().getValues();
+    for (let r = 5; r < values.length; r++) {
+      const row = values[r];
+      const name = String(row[COL.athlete] || '').trim();
+      const year = String(row[COL.year] || '').trim();
+      if (!name || !VALID_YEARS.has(year)) continue;
+      if (nameToEmailLocal_(name) !== local) continue;
+      const key = source.gender + '|' + name.toLowerCase();
+      if (!matches.has(key)) matches.set(key, athleteFromRow_(source, row, r));
+    }
+  });
+
+  return matches.size === 1 ? Array.from(matches.values())[0] : null;
+}
+
+function nameToEmailLocal_(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return '';
+  const clean = value => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const first = clean(parts[0]);
+  const last = clean(parts[parts.length - 1]);
+  return first && last ? first + '.' + last : '';
+}
+
+function findAthlete_(ss, athleteName, gender) {
+  const wantedName = String(athleteName || '').trim().toLowerCase();
+  const wantedGender = String(gender || '').trim().toLowerCase();
+  for (let i = 0; i < SOURCE_SHEETS.length; i++) {
+    const source = SOURCE_SHEETS[i];
+    if (wantedGender && source.gender.toLowerCase() !== wantedGender) continue;
+    const sheet = ss.getSheetByName(source.name);
+    if (!sheet) continue;
+    const values = sheet.getDataRange().getValues();
+    for (let r = 5; r < values.length; r++) {
+      const row = values[r];
+      const name = String(row[COL.athlete] || '').trim();
+      const year = String(row[COL.year] || '').trim();
+      if (!name || !VALID_YEARS.has(year)) continue;
+      if (name.toLowerCase() === wantedName) return athleteFromRow_(source, row, r);
+    }
+  }
+  return null;
+}
+
+function athleteFromRow_(source, row, zeroBasedRowIndex) {
+  const sports = [COL.fallSport, COL.winterSport, COL.springSport]
+    .map(i => String(row[i] || '').trim())
+    .filter(v => v && !/^\d+(\.\d+)?$/.test(v));
+  return {
+    id: `${source.gender.toLowerCase()}-${zeroBasedRowIndex + 1}`,
+    name: String(row[COL.athlete] || '').trim(),
+    year: String(row[COL.year] || '').trim(),
+    gender: source.gender,
+    sports
+  };
+}
+
+function updatePrimarySport_(sheet, rowNumber, sportIcon) {
+  sheet.getRange(rowNumber, ACCOUNT_COL.primarySport + 1).setValue(sportIcon);
+  sheet.getRange(rowNumber, ACCOUNT_COL.updatedAt + 1).setValue(new Date());
+}
+
+function publicSessionAthlete_(athlete, primarySportIcon) {
+  const sports = athlete.sports || [];
+  const primary = primarySportIcon && sports.includes(primarySportIcon) ? primarySportIcon : '';
+  return {
+    id: athlete.id,
+    name: athlete.name,
+    year: athlete.year,
+    gender: athlete.gender,
+    sports,
+    sportNames: sports.map(sportName_),
+    primarySportIcon: primary || null,
+    primarySport: primary ? sportName_(primary) : null
+  };
+}
+
+function getPrimarySportMap_(ss) {
+  const map = {};
+  const sheet = ss.getSheetByName(ACCOUNTS_SHEET);
+  if (!sheet) return map;
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const status = String(row[ACCOUNT_COL.status] || 'Active').trim();
+    if (/^(disabled|inactive|blocked)$/i.test(status)) continue;
+    const name = String(row[ACCOUNT_COL.athleteName] || '').trim();
+    const gender = String(row[ACCOUNT_COL.gender] || '').trim();
+    const primary = String(row[ACCOUNT_COL.primarySport] || '').trim();
+    if (!name || !gender || !primary) continue;
+    map[gender.toLowerCase() + '|' + name.toLowerCase()] = primary;
+  }
+  return map;
+}
+
+function buildPublicPayload_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(PUBLIC_CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+
+  const ss = getSpreadsheet_();
+  const primarySportMap = getPrimarySportMap_(ss);
   const athletes = [];
 
   SOURCE_SHEETS.forEach(source => {
@@ -100,6 +396,9 @@ function buildPublicPayload_() {
       }
 
       const sportBonusInfo = sportBonus_(sports, overall, academics, athleticism, strength);
+      const key = source.gender.toLowerCase() + '|' + name.toLowerCase();
+      const savedPrimary = String(primarySportMap[key] || '').trim();
+      const primarySportIcon = savedPrimary && sports.includes(savedPrimary) ? savedPrimary : null;
 
       athletes.push({
         id: `${source.gender.toLowerCase()}-${r + 1}`,
@@ -113,6 +412,8 @@ function buildPublicPayload_() {
         strength,
         club1000,
         sports,
+        primarySportIcon,
+        primarySport: primarySportIcon ? sportName_(primarySportIcon) : null,
         sportBonus: sportBonusInfo.value,
         sportBonusSource: sportBonusInfo.source,
         tests,
@@ -123,8 +424,8 @@ function buildPublicPayload_() {
 
   const payload = {
     ok: true,
-    version: 'v10-live',
-    schemaVersion: 3,
+    version: 'v10-live-auth',
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     source: 'Athlete Training 2026-27',
     athleteCount: athletes.length,
@@ -132,8 +433,13 @@ function buildPublicPayload_() {
   };
 
   const text = JSON.stringify(payload);
-  if (text.length < 95000) cache.put('public-payload-v3', text, CACHE_SECONDS);
+  if (text.length < 95000) cache.put(PUBLIC_CACHE_KEY, text, CACHE_SECONDS);
   return payload;
+}
+
+function sportName_(icon) {
+  const key = String(icon || '').trim();
+  return SPORT_MAP[key] || key;
 }
 
 function bestMetric_(row, def) {
