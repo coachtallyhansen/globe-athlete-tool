@@ -40,10 +40,16 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load the live Sheet sync after the page's main code has initialized.
+// Load the live Sheet sync, then the preview login layer.
 window.addEventListener('DOMContentLoaded',()=>{
-  const s=document.createElement('script');
-  s.src='live-data.js?v=2';
-  s.async=true;
-  document.head.appendChild(s);
+  const live=document.createElement('script');
+  live.src='live-data.js?v=4';
+  live.async=true;
+  live.onload=()=>{
+    const auth=document.createElement('script');
+    auth.src='auth.js?v=1';
+    auth.async=true;
+    document.head.appendChild(auth);
+  };
+  document.head.appendChild(live);
 });
