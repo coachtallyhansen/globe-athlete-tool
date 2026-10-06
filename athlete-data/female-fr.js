@@ -40,22 +40,16 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load the live Sheet sync, then preview diagnostics and login layer.
+// Load live Sheet sync, then the focused preview login diagnostic.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
   live.src='live-data.js?v=4';
   live.async=true;
   live.onload=()=>{
-    const debug=document.createElement('script');
-    debug.src='auth-debug.js?v=1';
-    debug.async=true;
-    debug.onload=()=>{
-      const auth=document.createElement('script');
-      auth.src='auth.js?v=2';
-      auth.async=true;
-      document.head.appendChild(auth);
-    };
-    document.head.appendChild(debug);
+    const auth=document.createElement('script');
+    auth.src='auth-test.js?v=1';
+    auth.async=true;
+    document.head.appendChild(auth);
   };
   document.head.appendChild(live);
 });
