@@ -7,8 +7,11 @@
     pro:['Pro Agility','sec',0.01], dash:['40-Yard Dash','sec',0.01],
     bench:['Bench Press','lb',1], squat:['Back Squat','lb',1], dead:['Deadlift','lb',1], clean:['Clean','lb',1]
   };
-  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  function athletes(){ return (window.DATA&&Array.isArray(DATA.athletes)?DATA.athletes:[]).slice().sort((a,b)=>a.name.localeCompare(b.name)); }
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
+  function athletes(){
+    const list=(typeof DATA!=='undefined' && DATA && Array.isArray(DATA.athletes)) ? DATA.athletes : [];
+    return list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  }
   function isCoach(s){ return s && /^(coach|admin)$/i.test(String(s.role||'')); }
   function css(){ const s=document.createElement('style'); s.textContent=`
     .coachScoresBtn{border:1px solid #744814;border-radius:999px;background:#24180d;color:#f59a32;padding:8px 11px;font:800 12px/1.1 Inter,Arial,sans-serif;cursor:pointer}
@@ -40,7 +43,7 @@
     search.addEventListener('input',()=>{
       const q=search.value.trim().toLowerCase(); selected=null; panel.querySelector('#coachSelected').style.display='none'; disableSave();
       if(q.length<2){results.style.display='none';return}
-      const found=athletes().filter(a=>a.name.toLowerCase().includes(q)).slice(0,12);
+      const found=athletes().filter(a=>String(a.name||'').toLowerCase().includes(q)).slice(0,12);
       results.innerHTML=found.map(a=>`<div class="coachResult" data-id="${esc(a.id)}"><b>${esc(a.name)}</b><span>${esc(a.year)} · ${esc(a.gender)}</span></div>`).join('')||'<div class="coachResult"><span>No matches</span></div>';
       results.style.display='block';
       results.querySelectorAll('[data-id]').forEach(el=>el.onclick=()=>selectAthlete(el.dataset.id));
