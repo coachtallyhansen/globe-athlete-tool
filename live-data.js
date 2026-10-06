@@ -12,16 +12,16 @@
   let baseDraw = null;
 
   const SPORT_MAP = {
-    '🏈': 'Football','🏐': 'Volleyball','🏃': 'Cross Country','🏃‍♂️': 'Cross Country','🏃‍♀️': 'Cross Country',
-    '🏊': 'Swim','📣': 'Cheer','🎮': 'Esports','🏀': 'Basketball','🤼': 'Wrestling','⚽': 'Soccer','💃': 'Pom',
-    '⚾': 'Baseball','🥎': 'Softball','👟': 'Track & Field','🏃‍➡️': 'Track & Field','🎾': 'Tennis','⛳': 'Golf','🏖️🏐': 'Beach Volleyball'
+    '🏈': 'Football','🏐': 'Volleyball','🏃': 'Cross Country','🏊': 'Swim','📣': 'Cheer','🎮': 'Esports',
+    '🏀': 'Basketball','🤼': 'Wrestling','⚽': 'Soccer','💃': 'Pom','⚾': 'Baseball','🥎': 'Softball',
+    '👟': 'Track & Field','🎾': 'Tennis','⛳': 'Golf'
   };
   const SPORT_ORDER = [...new Set(Object.values(SPORT_MAP))];
 
   function sportName(icon){ return SPORT_MAP[String(icon || '').trim()] || String(icon || '').trim(); }
   function sportIcon(name){ const hit = Object.entries(SPORT_MAP).find(([,label]) => label === name); return hit ? hit[0] : ''; }
   function normalizeAthleteSports(a){
-    const raw = Array.isArray(a.sports) ? a.sports.map(x => String(x || '').trim()).filter(Boolean) : [];
+    const raw = Array.isArray(a.sports) ? a.sports.map(x => String(x || '').trim()).filter(icon => !!SPORT_MAP[icon]) : [];
     a.sportIcons = raw.slice();
     a.sports = raw.map(sportName);
     return a;
