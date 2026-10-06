@@ -2,7 +2,7 @@
 // Falls back to the bundled snapshot if config.js has no endpoint or the endpoint is unavailable.
 (function(){
   const REFRESH_MS = 60000;
-  const SPORT_FILTER_PREVIEW = /(^|\/)v10-preview\.html$/i.test(location.pathname);
+  const SPORT_FILTER_PREVIEW = true;
   let timer = null;
   let syncing = false;
   let lastGeneratedAt = null;
@@ -27,7 +27,7 @@
     return a;
   }
   function escapeHtml(value){
-    return String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    return String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   function renderSportIcons(a){
