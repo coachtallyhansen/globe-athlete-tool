@@ -1,6 +1,6 @@
 window.ATHLETE_CHUNKS=window.ATHLETE_CHUNKS||[];window.ATHLETE_CHUNKS.push(...[["female-132","Stella Graham","Fr","Female",2.5,5.0,1.0,1.5,"3.5–4.0",210,0,[],4.9,1.0,9.5,1.0,44.0,1.0,7.6,1.0,8.73,1.0,40.0,1.0,65.0,2.0,105.0,2.0,35.0,1.0]]);
 
-// V10 photo-preview enhancement: exact filename matches only.
+// Athlete profile photo enhancement: exact filename matches only.
 window.addEventListener('DOMContentLoaded',()=>{
   const css=document.createElement('style');
   css.textContent=`.heroPhoto{aspect-ratio:10/7;max-width:680px;margin:16px auto 24px;border-radius:22px;overflow:hidden;position:relative;background:#101010;border:1px solid #292929;box-shadow:0 22px 55px rgba(0,0,0,.32);background-repeat:no-repeat}.heroPhoto .photoEmpty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#707070}.photoEmpty b{display:block;font-size:48px;color:#454545;letter-spacing:.04em}.photoEmpty small{display:block;margin-top:8px;letter-spacing:.12em;font-size:10px}.photoSport{position:absolute;right:14px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.68);border:1px solid rgba(255,255,255,.2);font-size:11px;font-weight:800;letter-spacing:.06em;color:#eee}@media(max-width:650px){.heroPhoto{width:100%}}`;
@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load live Sheet sync, login, coach entry, student submissions, and coach approvals for V10 preview.
+// Load live Sheet sync, login, coach entry, student submissions, and coach approvals.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
   live.src='live-data.js?v=4';
@@ -65,13 +65,13 @@ window.addEventListener('DOMContentLoaded',()=>{
     debug.async=true;
     debug.onload=()=>{
       const auth=document.createElement('script');
-      auth.src='auth.js?v=4';
+      auth.src='auth.js?v=5';
       auth.async=true;
       auth.onload=()=>{
         [
-          ['coach-entry.js?v=3'],
-          ['student-submit.js?v=1'],
-          ['coach-approvals.js?v=1']
+          ['coach-entry.js?v=4'],
+          ['student-submit.js?v=2'],
+          ['coach-approvals.js?v=2']
         ].forEach(([src])=>{const s=document.createElement('script');s.src=src;s.async=true;document.head.appendChild(s)});
       };
       document.head.appendChild(auth);
