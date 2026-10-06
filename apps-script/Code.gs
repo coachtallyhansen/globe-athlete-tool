@@ -7,15 +7,18 @@ const CACHE_SECONDS = 30;
 const ACCOUNTS_SHEET = 'Web App Accounts';
 const SCORE_LOG_SHEET = 'Web App Score Log';
 const ALLOWED_DOMAIN = 'globeschools.org';
-const PUBLIC_CACHE_KEY = 'public-payload-v5';
+const PUBLIC_CACHE_KEY = 'public-payload-v6';
 const SEASONS = ['Previous Year','Fall','Winter','Spring','Summer'];
 
 const ACCOUNT_COL = { email:0, sub:1, athleteName:2, gender:3, primarySport:4, role:5, status:6, updatedAt:7 };
 
+// Only these sport icons are recognized by the web app.
+// Cross Country uses the plain runner only; Track & Field uses the shoe only.
+// Beach Volleyball is intentionally excluded.
 const SPORT_MAP = {
-  '🏈':'Football','🏐':'Volleyball','🏃':'Cross Country','🏃‍♂️':'Cross Country','🏃‍♀️':'Cross Country',
-  '🏊':'Swim','📣':'Cheer','🎮':'Esports','🏀':'Basketball','🤼':'Wrestling','⚽':'Soccer','💃':'Pom',
-  '⚾':'Baseball','🥎':'Softball','👟':'Track & Field','🏃‍➡️':'Track & Field','🎾':'Tennis','⛳':'Golf','🏖️🏐':'Beach Volleyball'
+  '🏈':'Football','🏐':'Volleyball','🏃':'Cross Country','🏊':'Swim','📣':'Cheer','🎮':'Esports',
+  '🏀':'Basketball','🤼':'Wrestling','⚽':'Soccer','💃':'Pom','⚾':'Baseball','🥎':'Softball',
+  '👟':'Track & Field','🎾':'Tennis','⛳':'Golf'
 };
 
 const COL = {
@@ -187,6 +190,12 @@ function nameToEmailLocal_(name) {
   const first=clean(parts[0]), last=clean(parts[parts.length-1]); return first&&last ? first+'.'+last : '';
 }
 
+function extractSports_(row) {
+  return [COL.fallSport,COL.winterSport,COL.springSport]
+    .map(i=>String(row[i]||'').trim())
+    .filter(v=>v && !/^\d+(\.\d+)?$/.test(v) && Object.prototype.hasOwnProperty.call(SPORT_MAP,v));
+}
+
 function findAthlete_(ss, athleteName, gender) {
   const wantedName=String(athleteName||'').trim().toLowerCase(), wantedGender=String(gender||'').trim().toLowerCase();
   for (let i=0;i<SOURCE_SHEETS.length;i++) {
@@ -202,7 +211,7 @@ function findAthlete_(ss, athleteName, gender) {
 }
 
 function athleteFromRow_(source,row,zeroBasedRowIndex) {
-  const sports=[COL.fallSport,COL.winterSport,COL.springSport].map(i=>String(row[i]||'').trim()).filter(v=>v&&!/^\d+(\.\d+)?$/.test(v));
+  const sports=extractSports_(row);
   return { id:`${source.gender.toLowerCase()}-${zeroBasedRowIndex+1}`, name:String(row[COL.athlete]||'').trim(), year:String(row[COL.year]||'').trim(), gender:source.gender, sports };
 }
 
@@ -318,7 +327,7 @@ function buildPublicPayload_() {
       const tests={}, lifts={};
       ['med','vert','broad','pro','dash'].forEach(key=>{const result=bestMetric_(row,METRICS[key]);if(result)tests[key]=result;});
       ['bench','squat','dead','clean'].forEach(key=>{const result=bestMetric_(row,METRICS[key]);if(result)lifts[key]=result;});
-      const sports=[COL.fallSport,COL.winterSport,COL.springSport].map(i=>String(row[i]||'').trim()).filter(v=>v&&!/^\d+(\.\d+)?$/.test(v));
+      const sports=extractSports_(row);
       const overall=scoreOrNull_(row[COL.overall]), academics=scoreOrNull_(row[COL.academics]), athleticism=scoreOrNull_(row[COL.athleticism]), strength=scoreOrNull_(row[COL.strength]);
       let club1000=validPerformance_(row[COL.totalWeight],false);
       if(club1000===null){const vals=Object.values(lifts).map(x=>x&&x.value).filter(Number.isFinite).sort((a,b)=>b-a);if(vals.length>=3)club1000=vals.slice(0,3).reduce((a,b)=>a+b,0);}
