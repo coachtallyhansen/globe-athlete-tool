@@ -1,6 +1,7 @@
-// Student score submission UI for V10 preview. Submissions require coach approval.
+// Student score submission UI for preview and permanent site. Submissions require coach approval.
 (function(){
-  if (!/(^|\/)v10-preview\.html$/i.test(location.pathname)) return;
+  const page=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+  if (!['index.html','v10-preview.html'].includes(page)) return;
 
   let session=null, panel=null, statusEl=null;
   const METRICS={
