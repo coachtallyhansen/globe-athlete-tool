@@ -2,10 +2,14 @@
 // Falls back to the bundled snapshot if config.js has no endpoint or the endpoint is unavailable.
 (function(){
   const REFRESH_MS = 60000;
+  const SPORT_FILTER_PREVIEW = /(^|\/)v10-preview\.html$/i.test(location.pathname);
   let timer = null;
   let syncing = false;
   let lastGeneratedAt = null;
   let sportUiInstalled = false;
+  let sportFilterInstalled = false;
+  let sportFilterEl = null;
+  let baseDraw = null;
 
   const SPORT_MAP = {
     '🏈': 'Football',
@@ -29,8 +33,15 @@
     '🏖️🏐': 'Beach Volleyball'
   };
 
+  const SPORT_ORDER = [...new Set(Object.values(SPORT_MAP))];
+
   function sportName(icon){
     return SPORT_MAP[String(icon || '').trim()] || String(icon || '').trim();
+  }
+
+  function sportIcon(name){
+    const hit = Object.entries(SPORT_MAP).find(([,label]) => label === name);
+    return hit ? hit[0] : '';
   }
 
   function normalizeAthleteSports(a){
@@ -80,6 +91,76 @@
     }
   }
 
+  function refreshSportOptions(){
+    if (!SPORT_FILTER_PREVIEW || !sportFilterEl || typeof DATA === 'undefined' || !DATA || !Array.isArray(DATA.athletes)) return;
+    const genderEl = document.querySelector('input[name=gender]:checked');
+    const gender = genderEl ? genderEl.value : null;
+    const selected = sportFilterEl.value || 'All';
+    const available = new Set();
+    DATA.athletes.forEach(a => {
+      if (gender && a.gender !== gender) return;
+      (a.sports || []).forEach(s => available.add(s));
+    });
+    const ordered = SPORT_ORDER.filter(s => available.has(s));
+    [...available].filter(s => !ordered.includes(s)).sort().forEach(s => ordered.push(s));
+    sportFilterEl.innerHTML = '<option value="All">All Sports</option>' + ordered.map(name => {
+      const icon = sportIcon(name);
+      return `<option value="${escapeHtml(name)}">${icon ? escapeHtml(icon) + ' ' : ''}${escapeHtml(name)}</option>`;
+    }).join('');
+    sportFilterEl.value = available.has(selected) ? selected : 'All';
+  }
+
+  function sportFilteredDraw(){
+    if (!SPORT_FILTER_PREVIEW || !sportFilterEl || typeof baseDraw !== 'function' || typeof DATA === 'undefined' || !DATA || !Array.isArray(DATA.athletes)) {
+      if (typeof baseDraw === 'function') baseDraw();
+      return;
+    }
+    const selected = sportFilterEl.value || 'All';
+    if (selected === 'All') {
+      baseDraw();
+      return;
+    }
+    const full = DATA.athletes.slice();
+    const filtered = full.filter(a => Array.isArray(a.sports) && a.sports.includes(selected));
+    DATA.athletes.splice(0, DATA.athletes.length, ...filtered);
+    try {
+      baseDraw();
+      const status = document.getElementById('status');
+      if (status && !status.textContent.includes(selected)) status.textContent += ` · ${selected}`;
+    } finally {
+      DATA.athletes.splice(0, DATA.athletes.length, ...full);
+    }
+  }
+
+  function installSportFilterPreview(){
+    if (!SPORT_FILTER_PREVIEW || sportFilterInstalled) return;
+    const filters = document.querySelector('.filters');
+    const year = document.getElementById('year');
+    if (!filters || !year || typeof window.draw !== 'function') return;
+
+    sportFilterInstalled = true;
+    baseDraw = window.draw;
+    sportFilterEl = document.createElement('select');
+    sportFilterEl.id = 'sportFilter';
+    sportFilterEl.title = 'Filter leaderboard by sport';
+    sportFilterEl.setAttribute('aria-label', 'Filter leaderboard by sport');
+    sportFilterEl.innerHTML = '<option value="All">All Sports</option>';
+    year.insertAdjacentElement('afterend', sportFilterEl);
+
+    sportFilterEl.addEventListener('change', sportFilteredDraw);
+    document.querySelectorAll('input[name=gender]').forEach(x => x.addEventListener('change', () => {
+      refreshSportOptions();
+      sportFilteredDraw();
+    }));
+    ['year','rank'].forEach(id => {
+      const node = document.getElementById(id);
+      if (node) node.addEventListener('change', sportFilteredDraw);
+    });
+    const search = document.getElementById('search');
+    if (search) search.addEventListener('input', sportFilteredDraw);
+    refreshSportOptions();
+  }
+
   function setBadge(mode, detail){
     const brand = document.querySelector('.brand');
     if (!brand) return;
@@ -122,7 +203,12 @@
     lastGeneratedAt = payload.generatedAt || null;
     const count = document.getElementById('athleteCount');
     if (count) count.textContent = `${DATA.athletes.length} athletes loaded`;
-    if (typeof draw === 'function') draw();
+    if (SPORT_FILTER_PREVIEW && sportFilterInstalled) {
+      refreshSportOptions();
+      sportFilteredDraw();
+    } else if (typeof draw === 'function') {
+      draw();
+    }
 
     const profile = document.getElementById('profile');
     if (profile && !profile.classList.contains('hide')) {
@@ -173,6 +259,7 @@
 
   function loadConfigThenStart(){
     installSportUi();
+    installSportFilterPreview();
     const s = document.createElement('script');
     s.src = `config.js?v=${Date.now()}`;
     s.onload = () => {
