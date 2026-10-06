@@ -1,10 +1,84 @@
-// Live sanitized Google Sheet sync for V10 preview.
+// Live sanitized Google Sheet sync for the Globe Athlete Tool.
 // Falls back to the bundled snapshot if config.js has no endpoint or the endpoint is unavailable.
 (function(){
   const REFRESH_MS = 60000;
   let timer = null;
   let syncing = false;
   let lastGeneratedAt = null;
+  let sportUiInstalled = false;
+
+  const SPORT_MAP = {
+    '🏈': 'Football',
+    '🏐': 'Volleyball',
+    '🏃': 'Cross Country',
+    '🏃‍♂️': 'Cross Country',
+    '🏃‍♀️': 'Cross Country',
+    '🏊': 'Swim',
+    '📣': 'Cheer',
+    '🎮': 'Esports',
+    '🏀': 'Basketball',
+    '🤼': 'Wrestling',
+    '⚽': 'Soccer',
+    '💃': 'Pom',
+    '⚾': 'Baseball',
+    '🥎': 'Softball',
+    '👟': 'Track & Field',
+    '🏃‍➡️': 'Track & Field',
+    '🎾': 'Tennis',
+    '⛳': 'Golf',
+    '🏖️🏐': 'Beach Volleyball'
+  };
+
+  function sportName(icon){
+    return SPORT_MAP[String(icon || '').trim()] || String(icon || '').trim();
+  }
+
+  function normalizeAthleteSports(a){
+    const raw = Array.isArray(a.sports) ? a.sports.map(x => String(x || '').trim()).filter(Boolean) : [];
+    a.sportIcons = raw.slice();
+    a.sports = raw.map(sportName);
+    return a;
+  }
+
+  function escapeHtml(value){
+    return String(value == null ? '' : value)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+
+  function renderSportIcons(a){
+    const holder = document.getElementById('sports');
+    if (!holder) return;
+    const icons = Array.isArray(a && a.sportIcons) ? a.sportIcons : [];
+    const names = Array.isArray(a && a.sports) ? a.sports : [];
+    holder.innerHTML = icons.map((icon, i) => {
+      const label = names[i] || sportName(icon);
+      return `<span class="sportEmoji" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${escapeHtml(icon)}</span>`;
+    }).join('');
+  }
+
+  function installSportUi(){
+    if (sportUiInstalled) return;
+    sportUiInstalled = true;
+
+    const css = document.createElement('style');
+    css.textContent = `.sports{align-items:center}.sportEmoji{width:42px;height:42px;border-radius:50%;border:1px solid #414141;background:#151515;display:inline-grid;place-items:center;font-size:23px;line-height:1;box-shadow:0 6px 16px rgba(0,0,0,.18)}@media(max-width:650px){.sportEmoji{width:38px;height:38px;font-size:21px}}`;
+    document.head.appendChild(css);
+
+    const originalOpenProfile = window.openProfile;
+    if (typeof originalOpenProfile === 'function') {
+      window.openProfile = function(id){
+        originalOpenProfile(id);
+        const a = (typeof DATA !== 'undefined' && DATA && Array.isArray(DATA.athletes))
+          ? DATA.athletes.find(x => x.id === id)
+          : null;
+        if (a) renderSportIcons(a);
+      };
+    }
+  }
 
   function setBadge(mode, detail){
     const brand = document.querySelector('.brand');
@@ -43,7 +117,8 @@
 
   function replaceAthletes(payload){
     if (typeof DATA === 'undefined' || !DATA || !Array.isArray(DATA.athletes)) return false;
-    DATA.athletes.splice(0, DATA.athletes.length, ...payload.athletes);
+    const incoming = payload.athletes.map(normalizeAthleteSports);
+    DATA.athletes.splice(0, DATA.athletes.length, ...incoming);
     lastGeneratedAt = payload.generatedAt || null;
     const count = document.getElementById('athleteCount');
     if (count) count.textContent = `${DATA.athletes.length} athletes loaded`;
@@ -52,8 +127,8 @@
     const profile = document.getElementById('profile');
     if (profile && !profile.classList.contains('hide')) {
       const id = new URLSearchParams(location.hash.replace(/^#/, '')).get('athlete');
-      if (id && DATA.athletes.some(a => a.id === id) && typeof openProfile === 'function') {
-        openProfile(id);
+      if (id && DATA.athletes.some(a => a.id === id) && typeof window.openProfile === 'function') {
+        window.openProfile(id);
       }
     }
     return true;
@@ -97,6 +172,7 @@
   }
 
   function loadConfigThenStart(){
+    installSportUi();
     const s = document.createElement('script');
     s.src = `config.js?v=${Date.now()}`;
     s.onload = () => {
