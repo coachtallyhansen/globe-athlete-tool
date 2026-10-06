@@ -24,7 +24,7 @@
     const style = document.createElement('style');
     style.textContent = `
       .brand{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
-      .authUi{display:flex;align-items:center;gap:8px;margin-left:auto;letter-spacing:normal}
+      .authUi{display:flex;align-items:center;gap:8px;margin-left:auto;letter-spacing:normal;flex-wrap:wrap}
       .authPill,.authAction{border:1px solid #3b3b3b;border-radius:999px;background:#151515;color:#eee;padding:8px 11px;font:700 12px/1.1 Inter,Arial,sans-serif}
       .authAction{cursor:pointer}.authAction:hover{border-color:#666}.authAction.primary{border-color:#6c451d;background:#24180d;color:#f2a34a}
       .authMessage{font:600 11px/1.35 Inter,Arial,sans-serif;color:#aaa;max-width:320px;text-align:right}
@@ -36,7 +36,7 @@
       .primarySportBtn{border:1px solid #3d3d3d;background:#171717;color:#eee;border-radius:999px;padding:9px 12px;cursor:pointer;font-weight:800}
       .primarySportBtn.selected{background:#f28c28;color:#111;border-color:#f28c28}
       .primarySportBtn:disabled{opacity:.55;cursor:wait}
-      @media(max-width:650px){.brand{align-items:flex-start}.authUi{width:100%;margin-left:0;justify-content:flex-start;flex-wrap:wrap}.authMessage{text-align:left;max-width:none;width:100%}}
+      @media(max-width:650px){.brand{align-items:flex-start}.authUi{width:100%;margin-left:0;justify-content:flex-start}.authMessage{text-align:left;max-width:none;width:100%}}
     `;
     document.head.appendChild(style);
   }
@@ -74,6 +74,12 @@
     if (!response.ok) throw new Error(`Login service returned HTTP ${response.status}.`);
     return await response.json();
   }
+  window.globeAuthPost = post;
+
+  function publishSession(){
+    window.globeCurrentSession = session;
+    window.dispatchEvent(new CustomEvent('globe-auth-session', { detail: session }));
+  }
 
   function currentAthleteId(){
     return new URLSearchParams(location.hash.replace(/^#/, '')).get('athlete');
@@ -90,7 +96,6 @@
     const profile = document.getElementById('profile');
     if (!profile || profile.classList.contains('hide')) return;
     if (currentAthleteId() !== session.athlete.id) return;
-
     const sportsHolder = document.getElementById('sports');
     if (!sportsHolder) return;
     const athlete = session.athlete;
@@ -120,7 +125,7 @@
       renderSignedIn();
       renderChooser();
       setMessage(`Primary sport saved: ${result.primarySport || athleteNameForIcon(sport, session.athlete)}`, 'good');
-      if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('globe-primary-sport-changed', { detail: result }));
+      window.dispatchEvent(new CustomEvent('globe-primary-sport-changed', { detail: result }));
     } catch (err) {
       setMessage(err.message || String(err), 'error');
       buttons.forEach(b => b.disabled = false);
@@ -133,7 +138,7 @@
     const athlete = session.athlete;
     const who = document.createElement('span');
     who.className = 'authPill';
-    who.textContent = athlete ? athlete.name : 'Signed in';
+    who.textContent = athlete ? athlete.name : (session.email || 'Signed in');
     signInSlot.appendChild(who);
     if (athlete) {
       const myProfile = document.createElement('button');
@@ -152,7 +157,8 @@
     out.textContent = 'Sign Out';
     out.addEventListener('click', signOut);
     signInSlot.appendChild(out);
-    setMessage(athlete ? 'District account linked.' : `Signed in as ${session.role || 'user'}.`, 'good');
+    setMessage(athlete ? 'District account linked.' : `Signed in successfully as ${session.role || 'user'}.`, 'good');
+    publishSession();
   }
 
   function signOut(){
@@ -161,6 +167,7 @@
     sessionStorage.removeItem(TOKEN_KEY);
     if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
     if (chooser) { chooser.remove(); chooser = null; }
+    publishSession();
     renderGoogleButton();
     setMessage('Signed out.');
   }
@@ -181,11 +188,9 @@
       }
     } catch (err) {
       session = null;
-      if (err && err.code === 'ACCOUNT_NOT_LINKED') {
-        setMessage('Your district login worked, but this email is not linked to an athlete yet.', 'error');
-      } else {
-        setMessage(err.message || String(err), 'error');
-      }
+      publishSession();
+      if (err && err.code === 'ACCOUNT_NOT_LINKED') setMessage('Your district login worked, but this email is not linked to an athlete yet.', 'error');
+      else setMessage(err.message || String(err), 'error');
       sessionStorage.removeItem(TOKEN_KEY);
       idToken = '';
       renderGoogleButton();
@@ -204,10 +209,7 @@
       setMessage('Preview is ready; Google Client ID still needs to be connected.');
       return;
     }
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      setMessage('Loading Google sign-in…');
-      return;
-    }
+    if (!window.google || !google.accounts || !google.accounts.id) { setMessage('Loading Google sign-in…'); return; }
     google.accounts.id.initialize({
       client_id: cid,
       callback: response => useCredential(response && response.credential),
@@ -216,12 +218,7 @@
       cancel_on_tap_outside: true
     });
     google.accounts.id.renderButton(signInSlot, {
-      type: 'standard',
-      theme: 'filled_black',
-      size: 'medium',
-      text: 'signin_with',
-      shape: 'pill',
-      logo_alignment: 'left'
+      type: 'standard', theme: 'filled_black', size: 'medium', text: 'signin_with', shape: 'pill', logo_alignment: 'left'
     });
     setMessage(`Students must use @${domain()}.`);
   }
@@ -232,9 +229,7 @@
     if (existing) return;
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.dataset.globeGsi = '1';
+    script.async = true; script.defer = true; script.dataset.globeGsi = '1';
     script.onload = () => { renderGoogleButton(); restoreSession(); };
     script.onerror = () => setMessage('Google sign-in could not load.', 'error');
     document.head.appendChild(script);
@@ -254,6 +249,8 @@
     } catch (err) {
       sessionStorage.removeItem(TOKEN_KEY);
       idToken = '';
+      session = null;
+      publishSession();
       renderGoogleButton();
     }
   }
@@ -261,31 +258,15 @@
   function hookProfile(){
     if (openProfileBase || typeof window.openProfile !== 'function') return;
     openProfileBase = window.openProfile;
-    window.openProfile = function(id){
-      openProfileBase(id);
-      setTimeout(renderChooser, 0);
-    };
+    window.openProfile = function(id){ openProfileBase(id); setTimeout(renderChooser, 0); };
   }
 
   function waitForConfig(tries){
-    if (typeof window.GOOGLE_CLIENT_ID !== 'undefined' && endpoint()) {
-      loadGoogleIdentity();
-      return;
-    }
-    if (tries <= 0) {
-      loadGoogleIdentity();
-      return;
-    }
+    if (typeof window.GOOGLE_CLIENT_ID !== 'undefined' && endpoint()) { loadGoogleIdentity(); return; }
+    if (tries <= 0) { loadGoogleIdentity(); return; }
     setTimeout(() => waitForConfig(tries - 1), 100);
   }
 
-  function start(){
-    injectStyles();
-    if (!buildAuthUi()) return;
-    hookProfile();
-    waitForConfig(40);
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true});
-  else start();
+  function start(){ injectStyles(); if (!buildAuthUi()) return; hookProfile(); waitForConfig(40); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true}); else start();
 })();
