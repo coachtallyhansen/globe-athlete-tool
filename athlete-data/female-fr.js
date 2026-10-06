@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load live Sheet sync, login, then coach score-entry preview tools.
+// Load live Sheet sync, login, coach entry, student submissions, and coach approvals for V10 preview.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
   live.src='live-data.js?v=4';
@@ -68,10 +68,11 @@ window.addEventListener('DOMContentLoaded',()=>{
       auth.src='auth.js?v=4';
       auth.async=true;
       auth.onload=()=>{
-        const coach=document.createElement('script');
-        coach.src='coach-entry.js?v=3';
-        coach.async=true;
-        document.head.appendChild(coach);
+        [
+          ['coach-entry.js?v=3'],
+          ['student-submit.js?v=1'],
+          ['coach-approvals.js?v=1']
+        ].forEach(([src])=>{const s=document.createElement('script');s.src=src;s.async=true;document.head.appendChild(s)});
       };
       document.head.appendChild(auth);
     };
