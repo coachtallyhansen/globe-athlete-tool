@@ -69,7 +69,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       auth.async=true;
       auth.onload=()=>{
         const coach=document.createElement('script');
-        coach.src='coach-entry.js?v=2';
+        coach.src='coach-entry.js?v=3';
         coach.async=true;
         document.head.appendChild(coach);
       };
