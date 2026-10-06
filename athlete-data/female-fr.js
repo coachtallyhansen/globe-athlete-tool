@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load the live Sheet sync, then preview diagnostics and login layer.
+// Load live Sheet sync, login, then coach score-entry preview tools.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
   live.src='live-data.js?v=4';
@@ -65,8 +65,14 @@ window.addEventListener('DOMContentLoaded',()=>{
     debug.async=true;
     debug.onload=()=>{
       const auth=document.createElement('script');
-      auth.src='auth.js?v=3';
+      auth.src='auth.js?v=4';
       auth.async=true;
+      auth.onload=()=>{
+        const coach=document.createElement('script');
+        coach.src='coach-entry.js?v=1';
+        coach.async=true;
+        document.head.appendChild(coach);
+      };
       document.head.appendChild(auth);
     };
     document.head.appendChild(debug);
