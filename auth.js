@@ -1,7 +1,7 @@
-// Student Google sign-in + primary sport picker. Preview-only until approved.
+// Student Google sign-in + primary sport picker for preview and permanent site.
 (function(){
-  const AUTH_PREVIEW = /(^|\/)v10-preview\.html$/i.test(location.pathname);
-  if (!AUTH_PREVIEW) return;
+  const page=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+  if (!['index.html','v10-preview.html'].includes(page)) return;
 
   const TOKEN_KEY = 'globe-athlete-id-token';
   const DEFAULT_DOMAIN = 'globeschools.org';
@@ -206,7 +206,7 @@
       disabled.className = 'authPill';
       disabled.textContent = 'Student Login · setup needed';
       signInSlot.appendChild(disabled);
-      setMessage('Preview is ready; Google Client ID still needs to be connected.');
+      setMessage('Google Client ID still needs to be connected.');
       return;
     }
     if (!window.google || !google.accounts || !google.accounts.id) { setMessage('Loading Google sign-in…'); return; }
