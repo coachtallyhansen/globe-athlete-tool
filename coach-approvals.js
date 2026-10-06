@@ -1,6 +1,7 @@
-// Coach approval queue for student-submitted scores. V10 preview only.
+// Coach approval queue for student-submitted scores on preview and permanent site.
 (function(){
-  if (!/(^|\/)v10-preview\.html$/i.test(location.pathname)) return;
+  const page=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+  if (!['index.html','v10-preview.html'].includes(page)) return;
   let session=null,panel=null,items=[];
   const isCoach=s=>s&&/^(coach|admin)$/i.test(String(s.role||''));
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
