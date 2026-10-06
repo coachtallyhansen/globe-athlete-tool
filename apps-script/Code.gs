@@ -1,154 +1,72 @@
-const SOURCE_SHEETS = [
-  { name: 'Athlete Metrics (Male)', gender: 'Male' },
-  { name: 'Athlete Metrics (Female)', gender: 'Female' }
-];
-const VALID_YEARS = new Set(['Sr', 'Jr', 'So', 'Fr']);
-const CACHE_SECONDS = 30;
-const ACCOUNTS_SHEET = 'Web App Accounts';
-const SCORE_LOG_SHEET = 'Web App Score Log';
-const PENDING_SCORE_SHEET = 'Web App Pending Scores';
-const ALLOWED_DOMAIN = 'globeschools.org';
-const PUBLIC_CACHE_KEY = 'public-payload-v7';
-const SEASONS = ['Previous Year','Fall','Winter','Spring','Summer'];
-
-const ACCOUNT_COL = { email:0, sub:1, athleteName:2, gender:3, primarySport:4, role:5, status:6, updatedAt:7 };
-const PENDING_COL = {
-  id:0, submittedAt:1, studentEmail:2, athleteName:3, gender:4, athleteId:5,
-  metricKey:6, metricLabel:7, season:8, proposedValue:9, status:10,
-  reviewedAt:11, reviewedBy:12, reviewNote:13, appliedOld:14, appliedNew:15
+const SOURCE_SHEETS=[{name:'Athlete Metrics (Male)',gender:'Male'},{name:'Athlete Metrics (Female)',gender:'Female'}];
+const VALID_YEARS=new Set(['Sr','Jr','So','Fr']);
+const ACCOUNTS_SHEET='Web App Accounts',SCORE_LOG_SHEET='Web App Score Log',PENDING_SCORE_SHEET='Web App Pending Scores';
+const ALLOWED_DOMAIN='globeschools.org',PUBLIC_CACHE_KEY='public-payload-v7',CACHE_SECONDS=30;
+const SEASONS=['Previous Year','Fall','Winter','Spring','Summer'];
+const ACCOUNT_COL={email:0,sub:1,athleteName:2,gender:3,primarySport:4,role:5,status:6,updatedAt:7};
+const PENDING_COL={id:0,submittedAt:1,studentEmail:2,athleteName:3,gender:4,athleteId:5,metricKey:6,metricLabel:7,season:8,proposedValue:9,status:10,reviewedAt:11,reviewedBy:12,reviewNote:13,appliedOld:14,appliedNew:15};
+const SPORT_MAP={'🏈':'Football','🏐':'Volleyball','🏃':'Cross Country','🏊':'Swim','📣':'Cheer','🎮':'Esports','🏀':'Basketball','🤼':'Wrestling','⚽':'Soccer','💃':'Pom','⚾':'Baseball','🥎':'Softball','👟':'Track & Field','🎾':'Tennis','⛳':'Golf'};
+const COL={athlete:0,year:1,fallSport:5,winterSport:6,springSport:7,overall:8,academics:9,gpa:10,athleticism:61,totalWeight:162,strength:163};
+const METRICS={
+  med:{label:'Med Ball Toss',unit:'ft',raws:[11,13,15,17,19],timed:false},vert:{label:'Vertical Jump',unit:'in',raws:[21,23,25,27,29],timed:false},broad:{label:'Broad Jump',unit:'in',raws:[31,33,35,37,39],timed:false},
+  pro:{label:'Pro Agility',unit:'sec',raws:[41,43,45,47,49],timed:true},dash:{label:'40 Yard Dash',unit:'sec',raws:[51,53,55,57,59],timed:true},bench:{label:'Bench Press',unit:'lb',raws:[64,69,74,79,84],timed:false},
+  squat:{label:'Back Squat',unit:'lb',raws:[89,94,99,104,109],timed:false},dead:{label:'Deadlift',unit:'lb',raws:[114,119,124,129,134],timed:false},clean:{label:'Clean',unit:'lb',raws:[139,144,149,154,159],timed:false}
 };
 
-// Only these sport icons are recognized by the web app.
-// Cross Country uses the plain runner only; Track & Field uses the shoe only.
-// Beach Volleyball is intentionally excluded.
-const SPORT_MAP = {
-  '🏈':'Football','🏐':'Volleyball','🏃':'Cross Country','🏊':'Swim','📣':'Cheer','🎮':'Esports',
-  '🏀':'Basketball','🤼':'Wrestling','⚽':'Soccer','💃':'Pom','⚾':'Baseball','🥎':'Softball',
-  '👟':'Track & Field','🎾':'Tennis','⛳':'Golf'
-};
+function doGet(e){try{if(e&&e.parameter&&e.parameter.mode==='health')return json_({ok:true,service:'Globe Athlete Public Data',version:'v10-student-submissions'});return json_(buildPublicPayload_())}catch(err){return json_({ok:false,error:msg_(err),generatedAt:new Date().toISOString()})}}
+function doPost(e){try{
+  const b=parseBody_(e),action=String(b.action||'').trim();if(!action)return json_({ok:false,code:'MISSING_ACTION',error:'Missing action.'});
+  const claims=verifyToken_(b.idToken),ss=getSpreadsheet_(),a=resolveAccount_(ss,claims);if(!a.ok)return json_(a);
+  if(action==='session')return json_({ok:true,role:a.role,email:claims.email,athlete:a.athlete?sessionAthlete_(a.athlete,a.primarySport):null});
+  if(action==='setPrimarySport'){if(!a.athlete)return json_({ok:false,code:'NO_ATHLETE',error:'This account is not linked to an athlete.'});const s=String(b.sport||'').trim();if(!s||!a.athlete.sports.includes(s))return json_({ok:false,code:'INVALID_SPORT',error:'Choose one of the sports assigned to this athlete.'});updatePrimarySport_(a.sheet,a.rowNumber,s);CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);return json_({ok:true,primarySportIcon:s,primarySport:sportName_(s),athlete:sessionAthlete_(a.athlete,s)})}
+  if(action==='coachScoreContext'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(coachContext_(ss,b))}
+  if(action==='coachUpdateScore'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(coachUpdate_(ss,b,claims))}
+  if(action==='studentScoreContext'){if(!isStudent_(a.role)||!a.athlete)return json_(forbiddenStudent_());return json_(studentContext_(ss,a,b))}
+  if(action==='studentSubmitScore'){if(!isStudent_(a.role)||!a.athlete)return json_(forbiddenStudent_());return json_(studentSubmit_(ss,a,b,claims))}
+  if(action==='studentMySubmissions'){if(!isStudent_(a.role)||!a.athlete)return json_(forbiddenStudent_());return json_(mySubmissions_(ss,a,claims))}
+  if(action==='coachPendingScores'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(pendingScores_(ss))}
+  if(action==='coachReviewSubmission'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(reviewSubmission_(ss,b,claims))}
+  return json_({ok:false,code:'UNKNOWN_ACTION',error:'Unknown action.'});
+}catch(err){return json_({ok:false,code:'SERVER_ERROR',error:msg_(err)})}}
+function forbiddenCoach_(){return{ok:false,code:'FORBIDDEN',error:'Coach access required.'}}function forbiddenStudent_(){return{ok:false,code:'FORBIDDEN',error:'Student athlete access required.'}}function msg_(e){return String(e&&e.message?e.message:e)}
+function parseBody_(e){const t=e&&e.postData&&e.postData.contents?e.postData.contents:'';if(!t)return{};try{return JSON.parse(t)}catch(_){throw new Error('Invalid request body.')}}
+function getSpreadsheet_(){const id=PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');if(!id)throw new Error('Missing Script Property: SPREADSHEET_ID');return SpreadsheetApp.openById(id)}
+function verifyToken_(token){token=String(token||'').trim();if(!token)throw new Error('Missing Google sign-in token.');const cid=String(PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID')||'').trim();if(!cid)throw new Error('Missing Script Property: GOOGLE_CLIENT_ID');const r=UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token='+encodeURIComponent(token),{muteHttpExceptions:true});if(r.getResponseCode()!==200)throw new Error('Google sign-in token could not be verified.');const c=JSON.parse(r.getContentText()),email=String(c.email||'').trim().toLowerCase(),hd=String(c.hd||'').trim().toLowerCase();if(String(c.aud||'')!==cid)throw new Error('Google sign-in token was issued for a different app.');if(!(c.email_verified===true||String(c.email_verified).toLowerCase()==='true'))throw new Error('Google account email is not verified.');if(!email.endsWith('@'+ALLOWED_DOMAIN)||hd!==ALLOWED_DOMAIN)throw new Error('Please sign in with a @'+ALLOWED_DOMAIN+' account.');if(!Number(c.exp)||Number(c.exp)*1000<Date.now())throw new Error('Google sign-in token has expired.');return{email,sub:String(c.sub||'')}}
 
-const COL = {
-  athlete:0, year:1, fallSport:5, winterSport:6, springSport:7, overall:8, academics:9, gpa:10,
-  athleticism:61, totalWeight:162, strength:163
-};
+function getAccountsSheet_(ss){let sh=ss.getSheetByName(ACCOUNTS_SHEET);if(!sh){sh=ss.insertSheet(ACCOUNTS_SHEET);sh.getRange(1,1,1,8).setValues([['Email','Google Sub','Athlete Name','Gender','Primary Sport','Role','Status','Updated At']]);sh.setFrozenRows(1)}return sh}
+function resolveAccount_(ss,c){const sh=getAccountsSheet_(ss),v=sh.getDataRange().getValues();for(let r=1;r<v.length;r++){const row=v[r];if(String(row[0]||'').trim().toLowerCase()!==c.email)continue;const status=String(row[6]||'Active').trim();if(/^(disabled|inactive|blocked)$/i.test(status))return{ok:false,code:'ACCOUNT_DISABLED',error:'This web app account is disabled.'};const sub=String(row[1]||'').trim();if(sub&&sub!==c.sub)return{ok:false,code:'ACCOUNT_MISMATCH',error:'This email is linked to a different Google account.'};if(!sub&&c.sub)sh.getRange(r+1,2).setValue(c.sub);const role=String(row[5]||'Student').trim()||'Student',name=String(row[2]||'').trim(),gender=String(row[3]||'').trim(),primary=String(row[4]||'').trim(),ath=name?findAthlete_(ss,name,gender):null;if(/^student$/i.test(role)&&!ath)return{ok:false,code:'ATHLETE_NOT_FOUND',error:'Your account is linked, but the athlete record could not be found.'};return{ok:true,role,athlete:ath,primarySport:primary,sheet:sh,rowNumber:r+1}}
+  const ath=autoMatch_(ss,c.email);if(!ath)return{ok:false,code:'ACCOUNT_NOT_LINKED',error:'Your district account is not linked to an athlete profile yet.',email:c.email};const rn=sh.getLastRow()+1;sh.getRange(rn,1,1,8).setValues([[c.email,c.sub,ath.name,ath.gender,'','Student','Active',new Date()]]);return{ok:true,role:'Student',athlete:ath,primarySport:'',sheet:sh,rowNumber:rn}}
+function isCoach_(r){return/^(coach|admin)$/i.test(String(r||'').trim())}function isStudent_(r){return/^student$/i.test(String(r||'').trim())}
+function emailLocal_(name){const p=String(name||'').trim().split(/\s+/).filter(Boolean),clean=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');return p.length<2?'':clean(p[0])+'.'+clean(p[p.length-1])}
+function autoMatch_(ss,email){const local=String(email||'').split('@')[0].toLowerCase(),m=[];SOURCE_SHEETS.forEach(s=>{const sh=ss.getSheetByName(s.name);if(!sh)return;const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++){const row=v[r],name=String(row[0]||'').trim(),yr=String(row[1]||'').trim();if(name&&VALID_YEARS.has(yr)&&emailLocal_(name)===local)m.push(athleteFromRow_(s,row,r))}});return m.length===1?m[0]:null}
+function sports_(row){return[COL.fallSport,COL.winterSport,COL.springSport].map(i=>String(row[i]||'').trim()).filter(x=>x&&Object.prototype.hasOwnProperty.call(SPORT_MAP,x))}
+function athleteFromRow_(s,row,r){return{id:`${s.gender.toLowerCase()}-${r+1}`,name:String(row[0]||'').trim(),year:String(row[1]||'').trim(),gender:s.gender,sports:sports_(row)}}
+function findAthlete_(ss,name,gender){name=String(name||'').trim().toLowerCase();gender=String(gender||'').trim().toLowerCase();for(const s of SOURCE_SHEETS){if(gender&&s.gender.toLowerCase()!==gender)continue;const sh=ss.getSheetByName(s.name);if(!sh)continue;const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++){if(String(v[r][0]||'').trim().toLowerCase()===name&&VALID_YEARS.has(String(v[r][1]||'').trim()))return athleteFromRow_(s,v[r],r)}}return null}
+function sessionAthlete_(a,p){const sports=a.sports||[],primary=p&&sports.includes(p)?p:'';return{id:a.id,name:a.name,year:a.year,gender:a.gender,sports,sportNames:sports.map(sportName_),primarySportIcon:primary||null,primarySport:primary?sportName_(primary):null}}
+function updatePrimarySport_(sh,r,s){sh.getRange(r,5).setValue(s);sh.getRange(r,8).setValue(new Date())}
 
-const METRICS = {
-  med:   { label:'Med Ball Toss', unit:'ft',  raws:[11,13,15,17,19], timed:false },
-  vert:  { label:'Vertical Jump', unit:'in',  raws:[21,23,25,27,29], timed:false },
-  broad: { label:'Broad Jump', unit:'in',      raws:[31,33,35,37,39], timed:false },
-  pro:   { label:'Pro Agility', unit:'sec',    raws:[41,43,45,47,49], timed:true },
-  dash:  { label:'40 Yard Dash', unit:'sec',   raws:[51,53,55,57,59], timed:true },
-  bench: { label:'Bench Press', unit:'lb',     raws:[64,69,74,79,84], timed:false },
-  squat: { label:'Back Squat', unit:'lb',      raws:[89,94,99,104,109], timed:false },
-  dead:  { label:'Deadlift', unit:'lb',        raws:[114,119,124,129,134], timed:false },
-  clean: { label:'Clean', unit:'lb',           raws:[139,144,149,154,159], timed:false }
-};
+function metricTarget_(b){const key=String(b.metric||'').trim(),season=String(b.season||'').trim(),def=METRICS[key],si=SEASONS.indexOf(season);if(!def)throw new Error('Unknown metric.');if(si<0)throw new Error('Unknown season.');return{key,season,def,rawIndex:def.raws[si]}}
+function athleteLoc_(ss,b){const id=String(b.athleteId||'').trim(),name=String(b.athleteName||'').trim(),gender=String(b.gender||'').trim(),m=id.match(/^(male|female)-(\d+)$/i);if(m){const g=m[1].toLowerCase()==='male'?'Male':'Female',rn=Number(m[2]),s=SOURCE_SHEETS.find(x=>x.gender===g),sh=s&&ss.getSheetByName(s.name);if(sh&&rn>=6&&rn<=sh.getLastRow()){const row=sh.getRange(rn,1,1,sh.getLastColumn()).getValues()[0],n=String(row[0]||'').trim();if(n&&VALID_YEARS.has(String(row[1]||'').trim())&&(!name||n.toLowerCase()===name.toLowerCase()))return{s,sh,row,rowNumber:rn}}}
+  const hits=[];SOURCE_SHEETS.forEach(s=>{if(gender&&s.gender.toLowerCase()!==gender.toLowerCase())return;const sh=ss.getSheetByName(s.name);if(!sh)return;const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++)if(String(v[r][0]||'').trim().toLowerCase()===name.toLowerCase()&&VALID_YEARS.has(String(v[r][1]||'').trim()))hits.push({s,sh,row:v[r],rowNumber:r+1})});if(hits.length!==1)throw new Error(hits.length?'Athlete match is ambiguous.':'Athlete could not be located.');return hits[0]}
+function display_(v){return v===null||v===undefined||v===''?'':typeof v==='number'?v:String(v).trim()}function same_(a,b){const na=Number(a),nb=Number(b);if(a!==''&&a!=null&&b!==''&&b!=null&&Number.isFinite(na)&&Number.isFinite(nb))return Math.abs(na-nb)<1e-9;return String(a==null?'':a).trim()===String(b==null?'':b).trim()}
+function validate_(def,v){const n=Number(v);if(!Number.isFinite(n))throw new Error('Enter a numeric score.');if(def.timed?n<=1:n<=0.5)throw new Error('That score is outside the valid range.');return n}
+function bestMetric_(row,def){let best=null;def.raws.forEach(i=>{const v=validPerf_(row[i],def.timed);if(v===null)return;const score=score_(row[i+1]);if(!best||(def.timed?v<best.value:v>best.value))best={value:v,score}});return best}
+function validPerf_(v,timed){if(v===null||v===undefined||v==='')return null;if(typeof v==='string'&&/^(|DNP|DNF|-)$/i.test(v.trim()))return null;const n=Number(v);if(!Number.isFinite(n))return null;return timed?(n>1?n:null):(n>0.5?n:null)}function score_(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}
+function coachContext_(ss,b){const t=metricTarget_(b),l=athleteLoc_(ss,b),cur=l.row[t.rawIndex];return{ok:true,athleteId:`${l.s.gender.toLowerCase()}-${l.rowNumber}`,athleteName:String(l.row[0]||'').trim(),gender:l.s.gender,metric:t.key,metricLabel:t.def.label,unit:t.def.unit,season:t.season,currentValue:cur===undefined?null:cur,currentDisplay:display_(cur),previousBest:bestMetric_(l.row,t.def)}}
+function coachUpdate_(ss,b,c){const t=metricTarget_(b),l=athleteLoc_(ss,b),cur=l.row[t.rawIndex];if(Object.prototype.hasOwnProperty.call(b,'expectedCurrent')&&!same_(cur,b.expectedCurrent))return{ok:false,code:'SCORE_CHANGED',error:'That spreadsheet cell changed since you loaded it. Reload the current score before saving.'};const val=validate_(t.def,b.value);l.sh.getRange(l.rowNumber,t.rawIndex+1).setValue(val);SpreadsheetApp.flush();const rec=l.sh.getRange(l.rowNumber,t.rawIndex+1,1,2).getValues()[0];logScore_(ss,c.email,l.s.gender,String(l.row[0]||'').trim(),t,cur,rec[0],'Coach Web App');CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);return{ok:true,athleteName:String(l.row[0]||'').trim(),metricLabel:t.def.label,unit:t.def.unit,season:t.season,oldValue:cur,newValue:rec[0],score:score_(rec[1])}}
+function logScore_(ss,email,gender,name,t,oldV,newV,source){let sh=ss.getSheetByName(SCORE_LOG_SHEET);if(!sh){sh=ss.insertSheet(SCORE_LOG_SHEET);sh.getRange(1,1,1,9).setValues([['Timestamp','Coach Email','Athlete','Gender','Metric','Season','Old Value','New Value','Source']]);sh.setFrozenRows(1)}sh.appendRow([new Date(),email,name,gender,t.def.label,t.season,oldV,newV,source||'Coach Web App'])}
 
-function doGet(e) {
-  try {
-    if (e && e.parameter && e.parameter.mode === 'health') {
-      return json_({ ok:true, service:'Globe Athlete Public Data', version:'v10-student-submissions' });
-    }
-    return json_(buildPublicPayload_());
-  } catch (err) {
-    return json_({ ok:false, error:errorMessage_(err), generatedAt:new Date().toISOString() });
-  }
-}
+function getPendingSheet_(ss){let sh=ss.getSheetByName(PENDING_SCORE_SHEET);if(!sh){sh=ss.insertSheet(PENDING_SCORE_SHEET);sh.getRange(1,1,1,16).setValues([['Submission ID','Submitted At','Student Email','Athlete','Gender','Athlete ID','Metric Key','Metric','Season','Proposed Value','Status','Reviewed At','Reviewed By','Review Note','Applied Old Value','Applied New Value']]);sh.setFrozenRows(1)}return sh}
+function studentLoc_(ss,a){return athleteLoc_(ss,{athleteId:a.athlete.id,athleteName:a.athlete.name,gender:a.athlete.gender})}
+function studentContext_(ss,a,b){const t=metricTarget_(b),l=studentLoc_(ss,a),cur=l.row[t.rawIndex];return{ok:true,metric:t.key,metricLabel:t.def.label,unit:t.def.unit,season:t.season,currentValue:cur===undefined?null:cur,currentDisplay:display_(cur),previousBest:bestMetric_(l.row,t.def)}}
+function studentSubmit_(ss,a,b,c){const t=metricTarget_(b),l=studentLoc_(ss,a),val=validate_(t.def,b.value),sh=getPendingSheet_(ss),lock=LockService.getScriptLock();if(!lock.tryLock(5000))return{ok:false,code:'BUSY',error:'Submission queue is busy. Please try again.'};try{const v=sh.getDataRange().getValues();for(let r=1;r<v.length;r++)if(String(v[r][PENDING_COL.status]||'').toLowerCase()==='pending'&&String(v[r][PENDING_COL.athleteId]||'')===a.athlete.id&&String(v[r][PENDING_COL.metricKey]||'')===t.key&&String(v[r][PENDING_COL.season]||'')===t.season)return{ok:false,code:'DUPLICATE_PENDING',error:'You already have a pending submission for this metric and season.'};const id=Utilities.getUuid();sh.appendRow([id,new Date(),c.email,a.athlete.name,a.athlete.gender,a.athlete.id,t.key,t.def.label,t.season,val,'Pending','','','','','']);return{ok:true,submissionId:id,status:'Pending'}}finally{lock.releaseLock()}}
+function pendingPublic_(r){return{id:String(r[0]||''),submittedAt:dateIso_(r[1]),athleteName:String(r[3]||''),gender:String(r[4]||''),athleteId:String(r[5]||''),metric:String(r[6]||''),metricLabel:String(r[7]||''),season:String(r[8]||''),value:Number(r[9]),status:String(r[10]||''),reviewedAt:dateIso_(r[11]),reviewedBy:String(r[12]||''),reviewNote:String(r[13]||'')}}
+function mySubmissions_(ss,a,c){const sh=ss.getSheetByName(PENDING_SCORE_SHEET);if(!sh)return{ok:true,submissions:[]};const v=sh.getDataRange().getValues(),out=[];for(let r=v.length-1;r>=1&&out.length<10;r--)if(String(v[r][2]||'').trim().toLowerCase()===c.email&&String(v[r][5]||'')===a.athlete.id)out.push(pendingPublic_(v[r]));return{ok:true,submissions:out}}
+function pendingScores_(ss){const sh=ss.getSheetByName(PENDING_SCORE_SHEET);if(!sh)return{ok:true,count:0,submissions:[]};const v=sh.getDataRange().getValues(),out=[];for(let r=1;r<v.length;r++){if(String(v[r][10]||'').toLowerCase()!=='pending')continue;const x=pendingPublic_(v[r]);try{const t=metricTarget_({metric:x.metric,season:x.season}),l=athleteLoc_(ss,{athleteId:x.athleteId,athleteName:x.athleteName,gender:x.gender}),cur=l.row[t.rawIndex];x.currentValue=cur===undefined?null:cur;x.currentDisplay=display_(cur);x.unit=t.def.unit;x.previousBest=bestMetric_(l.row,t.def)}catch(err){x.contextError=msg_(err)}out.push(x)}out.sort((a,b)=>a.athleteName.localeCompare(b.athleteName)||String(a.submittedAt).localeCompare(String(b.submittedAt)));return{ok:true,count:out.length,submissions:out}}
+function findPending_(sh,id){const v=sh.getDataRange().getValues();for(let r=1;r<v.length;r++)if(String(v[r][0]||'')===id)return{rowNumber:r+1,row:v[r]};return null}
+function reviewSubmission_(ss,b,c){const id=String(b.submissionId||'').trim(),decision=String(b.decision||'').trim().toLowerCase(),note=String(b.note||'').trim();if(!id)return{ok:false,code:'MISSING_ID',error:'Missing submission ID.'};if(!/^(approve|reject)$/.test(decision))return{ok:false,code:'INVALID_DECISION',error:'Decision must be approve or reject.'};const sh=getPendingSheet_(ss),lock=LockService.getScriptLock();if(!lock.tryLock(5000))return{ok:false,code:'BUSY',error:'Approval queue is busy. Please try again.'};try{const f=findPending_(sh,id);if(!f)return{ok:false,code:'NOT_FOUND',error:'Submission was not found.'};const r=f.row,status=String(r[10]||'').trim();if(status.toLowerCase()!=='pending')return{ok:false,code:'ALREADY_REVIEWED',error:`This submission is already ${status.toLowerCase()}.`};if(decision==='reject'){sh.getRange(f.rowNumber,11,1,4).setValues([['Rejected',new Date(),c.email,note]]);return{ok:true,submissionId:id,status:'Rejected'}}const t=metricTarget_({metric:String(r[6]||''),season:String(r[8]||'')}),l=athleteLoc_(ss,{athleteId:String(r[5]||''),athleteName:String(r[3]||''),gender:String(r[4]||'')}),cur=l.row[t.rawIndex];if(Object.prototype.hasOwnProperty.call(b,'expectedCurrent')&&!same_(cur,b.expectedCurrent))return{ok:false,code:'SCORE_CHANGED',error:'The official score changed since this approval list loaded. Refresh the approvals before approving.'};const val=validate_(t.def,r[9]);l.sh.getRange(l.rowNumber,t.rawIndex+1).setValue(val);SpreadsheetApp.flush();const rec=l.sh.getRange(l.rowNumber,t.rawIndex+1,1,2).getValues()[0];sh.getRange(f.rowNumber,11,1,6).setValues([['Approved',new Date(),c.email,note,cur,rec[0]]]);logScore_(ss,c.email,l.s.gender,String(l.row[0]||'').trim(),t,cur,rec[0],'Student Submission');CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);return{ok:true,submissionId:id,status:'Approved',athleteName:String(l.row[0]||'').trim(),metricLabel:t.def.label,season:t.season,newValue:rec[0],score:score_(rec[1]),unit:t.def.unit}}finally{lock.releaseLock()}}
+function dateIso_(v){if(!v)return null;const d=v instanceof Date?v:new Date(v);return isNaN(d.getTime())?String(v):d.toISOString()}
 
-function doPost(e) {
-  try {
-    const body = parsePostBody_(e);
-    const action = String(body.action || '').trim();
-    if (!action) return json_({ ok:false, code:'MISSING_ACTION', error:'Missing action.' });
-
-    const claims = verifyGoogleIdToken_(body.idToken);
-    const ss = getSpreadsheet_();
-    const account = resolveAccount_(ss, claims);
-    if (!account.ok) return json_(account);
-
-    if (action === 'session') {
-      return json_({
-        ok:true, role:account.role, email:claims.email,
-        athlete:account.athlete ? publicSessionAthlete_(account.athlete, account.primarySport) : null
-      });
-    }
-
-    if (action === 'setPrimarySport') {
-      if (!account.athlete) return json_({ ok:false, code:'NO_ATHLETE', error:'This account is not linked to an athlete.' });
-      const requested = String(body.sport || '').trim();
-      if (!requested || !account.athlete.sports.includes(requested)) {
-        return json_({ ok:false, code:'INVALID_SPORT', error:'Choose one of the sports assigned to this athlete.' });
-      }
-      updatePrimarySport_(account.sheet, account.rowNumber, requested);
-      CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);
-      return json_({
-        ok:true, primarySportIcon:requested, primarySport:sportName_(requested),
-        athlete:publicSessionAthlete_(account.athlete, requested)
-      });
-    }
-
-    if (action === 'coachScoreContext') {
-      if (!isCoachRole_(account.role)) return forbiddenCoach_();
-      return json_(coachScoreContext_(ss, body));
-    }
-    if (action === 'coachUpdateScore') {
-      if (!isCoachRole_(account.role)) return forbiddenCoach_();
-      return json_(coachUpdateScore_(ss, body, claims));
-    }
-
-    if (action === 'studentScoreContext') {
-      if (!isStudentRole_(account.role) || !account.athlete) return json_({ ok:false, code:'FORBIDDEN', error:'Student athlete access required.' });
-      return json_(studentScoreContext_(ss, account, body));
-    }
-    if (action === 'studentSubmitScore') {
-      if (!isStudentRole_(account.role) || !account.athlete) return json_({ ok:false, code:'FORBIDDEN', error:'Student athlete access required.' });
-      return json_(studentSubmitScore_(ss, account, body, claims));
-    }
-    if (action === 'studentMySubmissions') {
-      if (!isStudentRole_(account.role) || !account.athlete) return json_({ ok:false, code:'FORBIDDEN', error:'Student athlete access required.' });
-      return json_(studentMySubmissions_(ss, account, claims));
-    }
-
-    if (action === 'coachPendingScores') {
-      if (!isCoachRole_(account.role)) return forbiddenCoach_();
-      return json_(coachPendingScores_(ss));
-    }
-    if (action === 'coachReviewSubmission') {
-      if (!isCoachRole_(account.role)) return forbiddenCoach_();
-      return json_(coachReviewSubmission_(ss, body, claims));
-    }
-
-    return json_({ ok:false, code:'UNKNOWN_ACTION', error:'Unknown action.' });
-  } catch (err) {
-    return json_({ ok:false, code:'SERVER_ERROR', error:errorMessage_(err) });
-  }
-}
-
-function forbiddenCoach_() { return json_({ ok:false, code:'FORBIDDEN', error:'Coach access required.' }); }
-function errorMessage_(err) { return String(err && err.message ? err.message : err); }
-
-function parsePostBody_(e) {
-  const text = e && e.postData && e.postData.contents ? e.postData.contents : '';
-  if (!text) return {};
-  try { return JSON.parse(text); } catch (err) { throw new Error('Invalid request body.'); }
-}
-
-function getSpreadsheet_() {
-  const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-  if (!spreadsheetId) throw new Error('Missing Script Property: SPREADSHEET_ID');
-  return SpreadsheetApp.openById(spreadsheetId);
-}
-
-function verifyGoogleIdToken_(idToken) {
-  const token = String(idToken || '').trim();
-  if (!token) throw new Error('Missing Google sign-in token.');
-  const clientId = String(PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '').trim();
-  if (!clientId) throw new Error('Missing Script Property: GOOGLE_CLIENT_ID');
-  const response = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token), { muteHttpExceptions:true });
-  if (response.getResponseCode() !== 200) throw new Error('Google sign-in token could not be verified.');
-  const claims = JSON.parse(response.getContentText());
-  if (String(claims.aud || '') !== clientId) throw new Error('Google sign-in token was issued for a different app.');
-  if (!(claims.email_verified === true || String(claims.email_verified).toLowerCase() === 'true')) throw new Error('Google account email is not verified.');
-  const email = String(claims.email || '').trim().toLowerCase();
-  const hostedDomain = String(claims.hd || '').trim().toLowerCase();
-  if (!email.endsWith('@' + ALLOWED_DOMAIN) || hostedDomain !== ALLOWE
+function primaryMap_(ss){const out={},sh=ss.getSheetByName(ACCOUNTS_SHEET);if(!sh)return out;const v=sh.getDataRange().getValues();for(let r=1;r<v.length;r++){if(/^(disabled|inactive|blocked)$/i.test(String(v[r][6]||'Active').trim()))continue;const name=String(v[r][2]||'').trim(),g=String(v[r][3]||'').trim(),p=String(v[r][4]||'').trim();if(name&&g&&p)out[g.toLowerCase()+'|'+name.toLowerCase()]=p}return out}
+function buildPublicPayload_(){const cache=CacheService.getScriptCache(),cached=cache.get(PUBLIC_CACHE_KEY);if(cached)return JSON.parse(cached);const ss=getSpreadsheet_(),pm=primaryMap_(ss),athletes=[];SOURCE_SHEETS.forEach(s=>{const sh=ss.getSheetByName(s.name);if(!sh)throw new Error('Missing sheet: '+s.name);const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++){const row=v[r],name=String(row[0]||'').trim(),year=String(row[1]||'').trim();if(!name||!VALID_YEARS.has(year))continue;const tests={},lifts={};['med','vert','broad','pro','dash'].forEach(k=>{const x=bestMetric_(row,METRICS[k]);if(x)tests[k]=x});['bench','squat','dead','clean'].forEach(k=>{const x=bestMetric_(row,METRICS[k]);if(x)lifts[k]=x});const sports=sports_(row),overall=score_(row[8]),academics=score_(row[9]),athleticism=score_(row[61]),strength=score_(row[163]);let club=validPerf_(row[162],false);if(club===null){const vals=Object.values(lifts).map(x=>x.value).filter(Number.isFinite).sort((a,b)=>b-a);if(vals.length>=3)club=vals.slice(0,3).reduce((a,b)=>a+b,0)}const bonus=sportBonus_(sports,overall,academics,athleticism,strength),saved=String(pm[s.gender.toLowerCase()+'|'+name.toLowerCase()]||'').trim(),primary=saved&&sports.includes(saved)?saved:null;athletes.push({id:`${s.gender.toLowerCase()}-${r+1}`,name,year,gender:s.gender,overall,academics,gpaRange:gpaRange_(row[10]),athleticism,strength,club1000:club,sports,primarySportIcon:primary,primarySport:primary?sportName_(primary):null,sportBonus:bonus.value,sportBonusSource:bonus.source,tests,lifts})}});const p={ok:true,version:'v10-student-submissions',schemaVersion:6,generatedAt:new Date().toISOString(),source:'Athlete Training 2026-27',athleteCount:athletes.length,athletes},text=JSON.stringify(p);if(text.length<95000)cache.put(PUBLIC_CACHE_KEY,text,CACHE_SECONDS);return p}
+function sportName_(i){i=String(i||'').trim();return SPORT_MAP[i]||i}function sportBonus_(s,o,a,ath,str){if(s.length)return{value:Math.min(s.length,3)*.1,source:'sports'};const c=[a,ath,str];if(o!==null&&c.every(v=>v!==null)){const avg=c.reduce((x,y)=>x+y,0)/3,n=Math.round((o-avg)*10)/10;if(n>=0&&n<=.3)return{value:n,source:'inferred'}}return{value:null,source:'unknown'}}function gpaRange_(v){const n=Number(v);if(v===null||v===undefined||v===''||!Number.isFinite(n))return null;if(n>=3.5)return'3.5–4.0';if(n>=3)return'3.0–3.4';if(n>=2.5)return'2.5–2.9';if(n>=2)return'2.0–2.4';return'<2.0'}function json_(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON)}
