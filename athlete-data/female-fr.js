@@ -72,7 +72,7 @@ window.addEventListener('DOMContentLoaded',()=>{
           ['coach-entry.js?v=4'],
           ['student-submit.js?v=2'],
           ['coach-approvals.js?v=2'],
-          ['maxpreps-links.js?v=1']
+          ['maxpreps-links.js?v=2']
         ].forEach(([src])=>{const s=document.createElement('script');s.src=src;s.async=true;document.head.appendChild(s)});
       };
       document.head.appendChild(auth);
