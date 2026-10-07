@@ -8,7 +8,7 @@
     if(document.getElementById('maxprepsLinkStyle'))return;
     const s=document.createElement('style');
     s.id='maxprepsLinkStyle';
-    s.textContent=`.externalProfileLinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.maxprepsLink{display:inline-flex;align-items:center;gap:6px;border:1px solid #4b4b4b;border-radius:999px;background:#171717;color:#f2f2f2;padding:8px 11px;text-decoration:none;font:850 12px/1 Inter,Arial,sans-serif}.maxprepsLink:hover{border-color:#f28c28;color:#f28c28}.maxprepsLink .arrow{font-size:14px}`;
+    s.textContent=`.externalProfileLinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.maxprepsLink{display:inline-flex;align-items:center;gap:6px;border:1px solid #f28c28;border-radius:999px;background:#211508;color:#f6a34d;padding:9px 12px;text-decoration:none;font:900 12px/1 Inter,Arial,sans-serif}.maxprepsLink:hover{background:#2c1b09;color:#ffc078}.maxprepsLink .arrow{font-size:14px}`;
     document.head.appendChild(s);
   }
 
@@ -30,10 +30,27 @@
     holder.style.display=url?'flex':'none';
   }
 
-  injectStyle();
-  const oldOpen=window.openProfile;
-  if(typeof oldOpen==='function'){
-    window.openProfile=function(id){oldOpen(id);setTimeout(render,0);};
+  function install(){
+    injectStyle();
+    render();
+
+    // Render whenever the profile name or profile visibility changes. This is more
+    // reliable than depending on one particular openProfile wrapper/load order.
+    const nameEl=document.getElementById('pname');
+    const profile=document.getElementById('profile');
+    if(nameEl){
+      new MutationObserver(render).observe(nameEl,{childList:true,subtree:true,characterData:true});
+    }
+    if(profile){
+      new MutationObserver(render).observe(profile,{attributes:true,attributeFilter:['class']});
+    }
+
+    document.addEventListener('click',()=>setTimeout(render,0),true);
+    window.addEventListener('hashchange',render);
+    window.addEventListener('popstate',render);
+    window.addEventListener('globe-auth-session',()=>setTimeout(render,0));
+    window.addEventListener('globe-primary-sport-changed',()=>setTimeout(render,0));
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
