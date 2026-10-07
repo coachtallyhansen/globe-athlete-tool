@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadAssets();
 });
 
-// Load live Sheet sync, login, coach entry, student submissions, and coach approvals.
+// Load live Sheet sync, login, coach entry, student submissions, coach approvals, and external profile links.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
   live.src='live-data.js?v=4';
@@ -71,7 +71,8 @@ window.addEventListener('DOMContentLoaded',()=>{
         [
           ['coach-entry.js?v=4'],
           ['student-submit.js?v=2'],
-          ['coach-approvals.js?v=2']
+          ['coach-approvals.js?v=2'],
+          ['maxpreps-links.js?v=1']
         ].forEach(([src])=>{const s=document.createElement('script');s.src=src;s.async=true;document.head.appendChild(s)});
       };
       document.head.appendChild(auth);
