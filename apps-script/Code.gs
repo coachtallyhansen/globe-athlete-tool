@@ -19,6 +19,7 @@ function doPost(e){try{
   const claims=verifyToken_(b.idToken),ss=getSpreadsheet_(),a=resolveAccount_(ss,claims);if(!a.ok)return json_(a);
   if(action==='session')return json_({ok:true,role:a.role,email:claims.email,athlete:a.athlete?sessionAthlete_(a.athlete,a.primarySport):null});
   if(action==='setPrimarySport'){if(!a.athlete)return json_({ok:false,code:'NO_ATHLETE',error:'This account is not linked to an athlete.'});const s=String(b.sport||'').trim();if(!s||!a.athlete.sports.includes(s))return json_({ok:false,code:'INVALID_SPORT',error:'Choose one of the sports assigned to this athlete.'});updatePrimarySport_(a.sheet,a.rowNumber,s);CacheService.getScriptCache().remove(PUBLIC_CACHE_KEY);return json_({ok:true,primarySportIcon:s,primarySport:sportName_(s),athlete:sessionAthlete_(a.athlete,s)})}
+  if(action==='coachProfileReview'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(coachProfileReview_(ss))}
   if(action==='coachScoreContext'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(coachContext_(ss,b))}
   if(action==='coachUpdateScore'){if(!isCoach_(a.role))return json_(forbiddenCoach_());return json_(coachUpdate_(ss,b,claims))}
   if(action==='studentScoreContext'){if(!isStudent_(a.role)||!a.athlete)return json_(forbiddenStudent_());return json_(studentContext_(ss,a,b))}
@@ -45,6 +46,27 @@ function findAthlete_(ss,name,gender){name=String(name||'').trim().toLowerCase()
 function sessionAthlete_(a,p){const sports=a.sports||[],primary=p&&sports.includes(p)?p:'';return{id:a.id,name:a.name,year:a.year,gender:a.gender,sports,sportNames:sports.map(sportName_),primarySportIcon:primary||null,primarySport:primary?sportName_(primary):null}}
 function updatePrimarySport_(sh,r,s){sh.getRange(r,5).setValue(s);sh.getRange(r,8).setValue(new Date())}
 
+// Coach-only, read-only account audit. Never returns email, Google Sub, or scores.
+function coachProfileReview_(ss){
+  const roster=[];
+  SOURCE_SHEETS.forEach(s=>{const sh=ss.getSheetByName(s.name);if(!sh)throw new Error('Missing sheet: '+s.name);const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++){if(v[r][0]&&VALID_YEARS.has(String(v[r][1]||'').trim()))roster.push(athleteFromRow_(s,v[r],r));}});
+  const sh=ss.getSheetByName(ACCOUNTS_SHEET),values=sh?sh.getDataRange().getValues():[],issues=[];
+  const norm=x=>String(x||'').trim().replace(/\s+/g,' ').toLowerCase();
+  let checked=0;
+  for(let r=1;r<values.length;r++){
+    const row=values[r];if(row.every(x=>x===''))continue;checked++;
+    const name=String(row[2]||'').trim(),gender=String(row[3]||'').trim(),role=String(row[5]||'Student').trim();
+    const add=type=>issues.push({row:r+1,type,athleteName:name});
+    if(!name){if(/^student$/i.test(role))add('Account has no linked athlete');continue;}
+    const matches=roster.filter(a=>norm(a.name)===norm(name)&&(!gender||norm(a.gender)===norm(gender)));
+    if(!matches.length)add('Account-link name/gender mismatch');
+    else if(matches.length>1)add('Account link matches multiple roster records');
+    else{const p=String(row[4]||'').trim();if(p&&!matches[0].sports.includes(p))add('Saved primary sport not on roster');}
+    if(values.filter((other,i)=>i>0&&norm(other[0])&&norm(other[0])===norm(row[0])).length>1)add('Duplicate account email');
+  }
+  return{ok:true,accountsChecked:checked,issues,generatedAt:new Date().toISOString()};
+}
+
 function metricTarget_(b){const key=String(b.metric||'').trim(),season=String(b.season||'').trim(),def=METRICS[key],si=SEASONS.indexOf(season);if(!def)throw new Error('Unknown metric.');if(si<0)throw new Error('Unknown season.');return{key,season,def,rawIndex:def.raws[si]}}
 function athleteLoc_(ss,b){const id=String(b.athleteId||'').trim(),name=String(b.athleteName||'').trim(),gender=String(b.gender||'').trim(),m=id.match(/^(male|female)-(\d+)$/i);if(m){const g=m[1].toLowerCase()==='male'?'Male':'Female',rn=Number(m[2]),s=SOURCE_SHEETS.find(x=>x.gender===g),sh=s&&ss.getSheetByName(s.name);if(sh&&rn>=6&&rn<=sh.getLastRow()){const row=sh.getRange(rn,1,1,sh.getLastColumn()).getValues()[0],n=String(row[0]||'').trim();if(n&&VALID_YEARS.has(String(row[1]||'').trim())&&(!name||n.toLowerCase()===name.toLowerCase()))return{s,sh,row,rowNumber:rn}}}
   const hits=[];SOURCE_SHEETS.forEach(s=>{if(gender&&s.gender.toLowerCase()!==gender.toLowerCase())return;const sh=ss.getSheetByName(s.name);if(!sh)return;const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++)if(String(v[r][0]||'').trim().toLowerCase()===name.toLowerCase()&&VALID_YEARS.has(String(v[r][1]||'').trim()))hits.push({s,sh,row:v[r],rowNumber:r+1})});if(hits.length!==1)throw new Error(hits.length?'Athlete match is ambiguous.':'Athlete could not be located.');return hits[0]}
@@ -70,3 +92,4 @@ function dateIso_(v){if(!v)return null;const d=v instanceof Date?v:new Date(v);r
 function primaryMap_(ss){const out={},sh=ss.getSheetByName(ACCOUNTS_SHEET);if(!sh)return out;const v=sh.getDataRange().getValues();for(let r=1;r<v.length;r++){if(/^(disabled|inactive|blocked)$/i.test(String(v[r][6]||'Active').trim()))continue;const name=String(v[r][2]||'').trim(),g=String(v[r][3]||'').trim(),p=String(v[r][4]||'').trim();if(name&&g&&p)out[g.toLowerCase()+'|'+name.toLowerCase()]=p}return out}
 function buildPublicPayload_(){const cache=CacheService.getScriptCache(),cached=cache.get(PUBLIC_CACHE_KEY);if(cached)return JSON.parse(cached);const ss=getSpreadsheet_(),pm=primaryMap_(ss),athletes=[];SOURCE_SHEETS.forEach(s=>{const sh=ss.getSheetByName(s.name);if(!sh)throw new Error('Missing sheet: '+s.name);const v=sh.getDataRange().getValues();for(let r=5;r<v.length;r++){const row=v[r],name=String(row[0]||'').trim(),year=String(row[1]||'').trim();if(!name||!VALID_YEARS.has(year))continue;const tests={},lifts={};['med','vert','broad','pro','dash'].forEach(k=>{const x=bestMetric_(row,METRICS[k]);if(x)tests[k]=x});['bench','squat','dead','clean'].forEach(k=>{const x=bestMetric_(row,METRICS[k]);if(x)lifts[k]=x});const sports=sports_(row),overall=score_(row[8]),academics=score_(row[9]),athleticism=score_(row[61]),strength=score_(row[163]);let club=validPerf_(row[162],false);if(club===null){const vals=Object.values(lifts).map(x=>x.value).filter(Number.isFinite).sort((a,b)=>b-a);if(vals.length>=3)club=vals.slice(0,3).reduce((a,b)=>a+b,0)}const bonus=sportBonus_(sports,overall,academics,athleticism,strength),saved=String(pm[s.gender.toLowerCase()+'|'+name.toLowerCase()]||'').trim(),primary=saved&&sports.includes(saved)?saved:null;athletes.push({id:`${s.gender.toLowerCase()}-${r+1}`,name,year,gender:s.gender,overall,academics,gpaRange:gpaRange_(row[10]),athleticism,strength,club1000:club,sports,primarySportIcon:primary,primarySport:primary?sportName_(primary):null,sportBonus:bonus.value,sportBonusSource:bonus.source,tests,lifts})}});const p={ok:true,version:'v10-student-submissions',schemaVersion:6,generatedAt:new Date().toISOString(),source:'Athlete Training 2026-27',athleteCount:athletes.length,athletes},text=JSON.stringify(p);if(text.length<95000)cache.put(PUBLIC_CACHE_KEY,text,CACHE_SECONDS);return p}
 function sportName_(i){i=String(i||'').trim();return SPORT_MAP[i]||i}function sportBonus_(s,o,a,ath,str){if(s.length)return{value:Math.min(s.length,3)*.1,source:'sports'};const c=[a,ath,str];if(o!==null&&c.every(v=>v!==null)){const avg=c.reduce((x,y)=>x+y,0)/3,n=Math.round((o-avg)*10)/10;if(n>=0&&n<=.3)return{value:n,source:'inferred'}}return{value:null,source:'unknown'}}function gpaRange_(v){const n=Number(v);if(v===null||v===undefined||v===''||!Number.isFinite(n))return null;if(n>=3.5)return'3.5–4.0';if(n>=3)return'3.0–3.4';if(n>=2.5)return'2.5–2.9';if(n>=2)return'2.0–2.4';return'<2.0'}function json_(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON)}
+
