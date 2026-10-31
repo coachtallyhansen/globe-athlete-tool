@@ -91,7 +91,8 @@ window.addEventListener('DOMContentLoaded',()=>{
           ['coach-entry.js?v=4'],
           ['student-submit.js?v=2'],
           ['coach-approvals.js?v=2'],
-          ['maxpreps-links.js?v=4']
+          ['maxpreps-links.js?v=5'],
+          ['profile-review.js?v=1']
         ].forEach(([src])=>{const s=document.createElement('script');s.src=src;s.async=true;document.head.appendChild(s)});
       };
       document.head.appendChild(auth);
@@ -100,3 +101,4 @@ window.addEventListener('DOMContentLoaded',()=>{
   };
   document.head.appendChild(live);
 });
+
