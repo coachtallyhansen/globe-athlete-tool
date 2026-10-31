@@ -9,6 +9,13 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(!head)return;
   const hero=document.createElement('div');hero.id='heroPhoto';hero.className='heroPhoto';head.after(hero);
   const initials=n=>n.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+  const crispFootball={
+    'Heber Hansen':0,
+    'Braden Wager':1,
+    'Ben Layton':2,
+    'Landon Rios':3,
+    'Daniel Ramos':4
+  };
   let assetsReady=false;
   let primarySportByName={};
   function renderName(name){
@@ -19,6 +26,14 @@ window.addEventListener('DOMContentLoaded',()=>{
       hero.style.backgroundImage='linear-gradient(to bottom,rgba(0,0,0,0) 58%,rgba(9,9,9,.68) 100%),url("athlete-data/heber-soccer.webp?v=1")';
       hero.style.backgroundSize='100% 100%,cover';
       hero.style.backgroundPosition='center,center';
+      return;
+    }
+    const crispIndex=crispFootball[name];
+    if(crispIndex!==undefined&&window.ATHLETE_FOOTBALL_CROPS){
+      hero.innerHTML='<span class="photoSport">Football</span>';
+      hero.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,0) 58%,rgba(9,9,9,.68) 100%),url("${window.ATHLETE_FOOTBALL_CROPS}")`;
+      hero.style.backgroundSize='100% 100%,500% 100%';
+      hero.style.backgroundPosition=`center,${crispIndex*25}% center`;
       return;
     }
     const p=window.ATHLETE_PHOTOS?.[name];
@@ -47,6 +62,10 @@ window.addEventListener('DOMContentLoaded',()=>{
       await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='athlete-data/photo-map.js?v=3';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
       const b64=await fetch('athlete-data/photo-sprite-tiny.b64?v=1',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('photo sprite');return r.text()});
       window.ATHLETE_PHOTO_SPRITE='data:image/webp;base64,'+b64.trim();
+      try{
+        const footballB64=await fetch('athlete-data/football-crops-1.b64?v=1',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('football crops');return r.text()});
+        window.ATHLETE_FOOTBALL_CROPS='data:image/webp;base64,'+footballB64.trim();
+      }catch(e){console.warn('Clear football crops unavailable; using fallback photos.',e)}
       assetsReady=true;
     }catch(e){assetsReady=true;console.warn('Athlete photos unavailable',e)}
     if(!document.getElementById('profile').classList.contains('hide'))renderName(document.getElementById('pname').textContent);
