@@ -10,6 +10,9 @@ Current repo files and blob SHAs were inspected before edits.
 - Checked: syntax, whitespace, matching rules (exact vs nickname, duplicate same-sport images vs multisport images), fallback precedence, invalid metrics, duplicate athletes, no mutation of inputs.
 - Browser-tested before edits: permanent site loads 267 athletes, leaderboard, sport filter, sign-in controls. Updated review dialog and signed-in flows still pending browser testing.
 - User-tested: pending. Do not expand photo publication until this batch is tested by the user on the permanent site.
+- Repository publication: review assets, integration, cache-version update, and server audit saved to GitHub main and read back successfully. Permanent-site checks after publication still showed the old unversioned athlete loader and no profile-review script. Deployment is NOT verified. Available connector has no Pages publish/build control; unauthenticated Pages configuration read returned 404. Resolve Pages publication before user acceptance testing.
+- Post-edit browser checks: existing public leaderboard and Heber profile still render, MaxPreps link present, review control absent for signed-out visitor. These checks observed the older release, so they do not validate the new review UI.
+- Additional server tests passed: student-role request denied; coach request returns expected mismatch; no emails or Google Sub values returned; audit works with read-only mock sheets.
 
 ## Source inventory / audit
 
