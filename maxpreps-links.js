@@ -8,7 +8,11 @@
     'Reymondo Cassadore':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/reymondo-cassadore/bio/?careerid=bk742d3jl2jl5',
     'Kaden Flores':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/kaden-flores/bio/?careerid=1mdvut10vsr55',
     'Nick Enfield':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/nick-enfield/?careerid=3212j7sdb5j44',
-    'Zander Shirey':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/zander-shirey/bio/?careerid=lrshasjgfh533'
+    'Zander Shirey':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/zander-shirey/bio/?careerid=lrshasjgfh533',
+    'Greyson Kruger':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/greyson-kruger/?careerid=pohnjnhks25vf',
+    'Davien Lagunas':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/davien-lagunas/?careerid=rhcj5255ifqn7',
+    'Isaac Iron Shell':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/isaac-iron-shell/bio/?careerid=o6ahafh8pmsh1',
+    'Connor Dean':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/connor-dean/?careerid=7mfh9aeuue2g0'
   };
 
   function injectStyle(){
