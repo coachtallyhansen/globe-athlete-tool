@@ -1,7 +1,14 @@
-// External athlete profile links. Pilot: Heber Hansen -> MaxPreps.
+// External athlete profile links. Verified MaxPreps mappings.
 (function(){
   const LINKS={
-    'Heber Hansen':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/heber-hansen/?careerid=cl65oa2nfmcbb'
+    'Heber Hansen':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/heber-hansen/?careerid=cl65oa2nfmcbb',
+    'Braden Wager':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/braden-wager/?careerid=ebimcd00l7see',
+    'Ben Layton':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/ben-layton/?careerid=e2osckvj0m5p9',
+    'Corban Bejarano':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/corban-bejarano/?careerid=fm5s59f3a6srb',
+    'Reymondo Cassadore':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/reymondo-cassadore/bio/?careerid=bk742d3jl2jl5',
+    'Kaden Flores':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/kaden-flores/bio/?careerid=1mdvut10vsr55',
+    'Nick Enfield':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/nick-enfield/?careerid=3212j7sdb5j44',
+    'Zander Shirey':'https://www.maxpreps.com/az/globe/globe-tigers/athletes/zander-shirey/bio/?careerid=lrshasjgfh533'
   };
 
   function injectStyle(){
