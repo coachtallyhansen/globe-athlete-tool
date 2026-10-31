@@ -129,6 +129,7 @@
     if (typeof DATA === 'undefined' || !DATA || !Array.isArray(DATA.athletes)) return false;
     const incoming = payload.athletes.map(normalizeAthleteSports);
     DATA.athletes.splice(0, DATA.athletes.length, ...incoming);
+    window.globeReviewDataSource='Live Sheet · '+String(payload.generatedAt||'timestamp unavailable');
     lastGeneratedAt = payload.generatedAt || null;
     const count = document.getElementById('athleteCount'); if (count) count.textContent = `${DATA.athletes.length} athletes loaded`;
     if (SPORT_FILTER_PREVIEW && sportFilterInstalled) { refreshSportOptions(); sportFilteredDraw(); } else if (typeof draw === 'function') draw();
@@ -166,3 +167,4 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadConfigThenStart, {once:true}); else loadConfigThenStart();
 })();
+
