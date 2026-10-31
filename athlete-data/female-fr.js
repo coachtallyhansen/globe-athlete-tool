@@ -76,7 +76,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 // Load live Sheet sync, login, coach entry, student submissions, coach approvals, and external profile links.
 window.addEventListener('DOMContentLoaded',()=>{
   const live=document.createElement('script');
-  live.src='live-data.js?v=4';
+  live.src='live-data.js?v=5';
   live.async=true;
   live.onload=()=>{
     const debug=document.createElement('script');
