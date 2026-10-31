@@ -63,7 +63,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       const b64=await fetch('athlete-data/photo-sprite-tiny.b64?v=1',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('photo sprite');return r.text()});
       window.ATHLETE_PHOTO_SPRITE='data:image/webp;base64,'+b64.trim();
       try{
-        const footballB64=await fetch('athlete-data/football-crops-1.b64?v=1',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('football crops');return r.text()});
+        const footballB64=await fetch('athlete-data/football-crops-2.b64?v=2',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('football crops');return r.text()});
         window.ATHLETE_FOOTBALL_CROPS='data:image/webp;base64,'+footballB64.trim();
       }catch(e){console.warn('Clear football crops unavailable; using fallback photos.',e)}
       assetsReady=true;
